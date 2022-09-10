@@ -1,0 +1,424 @@
+/*
+ * @NOTE: Prepend a `~` to css file paths that are in your node_modules
+ *        See https://github.com/webpack-contrib/sass-loader#imports
+ */
+/* body {
+  position: relative;
+  color: white;
+  width: 100%;
+  height: 100vh;
+  background-color: #222222;
+  font-family: sans-serif;
+  justify-content: left;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  padding: 0px 0px;
+  margin: 0px 0px;
+}
+
+.root {
+  width: 100%;
+  height: 100vh;
+  padding: 0px 0px;
+  margin: 0px 0px;
+}
+
+.button {
+  padding: 10px 20px;
+  border-radius: 10px;
+  border: none;
+  appearance: none;
+  font-size: 1.3rem;
+  box-shadow: 0px 8px 28px -6px rgba(24, 39, 75, 0.12),
+    0px 18px 88px -4px rgba(24, 39, 75, 0.14);
+  transition: all ease-in 0.1s;
+  cursor: pointer;
+  opacity: 0.9;
+}
+
+.button:hover {
+  color: orange;
+  background-color: #333333;
+  transform: scale(1.05);
+  opacity: 1;
+}
+
+a {
+  text-decoration: none;
+  height: fit-content;
+  width: fit-content;
+  margin: 10px;
+}
+
+a:hover {
+  opacity: 1;
+  text-decoration: none;
+}
+
+.HeroImage {
+  width: 100%;
+  display: flex;
+  justify-content: left;
+  align-items: center;
+  padding: 0px 0px;
+  margin: 0px 0px;
+}
+
+.button, .listitem {
+  cursor: pointer;
+}
+
+.list {
+  width: 100%;
+  height: 100%;
+  padding: 0px 0px;
+  margin: 0px 0px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.listitem {
+  width: 100%;
+  background-color: #222222;
+  color: #ffffff;
+  display: flex;
+  justify-content: left;
+  align-items: center;
+  list-style: none;
+  padding: 0px 0px;
+  margin: 0px 0px;
+}
+
+.listitem {
+  width: 100%;
+  background-color: #222222;
+  color: #ffffff;
+  display: flex;
+  justify-content: left;
+  align-items: center;
+  list-style: none;
+  padding: 0px 0px;
+  margin: 0px 0px;
+} */
+
+
+@import 'material-icons/iconfont/material-icons.css';
+@import '~bootstrap/scss/bootstrap';
+
+.header {
+  flex-shrink: 0;
+}
+.content {
+  flex-grow: 1;
+  overflow: auto;
+  min-height: 2em;
+}
+// .footer{
+//   flex-shrink: 0;
+// }
+
+
+/* override browser default */
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  user-select: none;
+
+  float:left;
+  width:100%;
+  overflow-y: auto;
+  height: 100vh;
+}
+
+/* use viewport-relative units to cover page fully */
+html, body {
+  height: 100vh;
+  width: 100vw;
+  position:relative;
+}
+
+html, body {
+  font-family: Arial, Helvetica, sans-serif;
+  color: white;
+  background-color: #252526;
+  //background-color: white;
+  cursor: pointer;
+}
+
+
+a, a:hover, a:visited {
+  color: silver;
+  text-decoration: none;
+}
+
+.button {
+  display: inline-block;
+  background-color: lightblue;
+  color: black;
+  padding: 1em;
+  margin: .2em;
+}
+.button-disabled {
+  display: inline-block;
+  background-color: lightblue;
+  color: grey;
+  padding: 1em;
+  margin: .2em;
+}
+
+H1 {
+  margin: 0;
+  font-size: 1em;
+}
+
+
+.listing {
+  //float:left;
+  width:100%;
+  overflow-y: auto;
+  height: 100vh;
+  padding: 0;
+  margin: 0;
+  padding-bottom:  calc( 120px + 2em );
+}
+
+
+
+.albumart {
+  width: 25vw;
+  height: 25vw;
+  object-fit:cover;
+  object-position: center;
+}
+
+.listitem {
+  border-color: #000000 #000000 #000000 #000000;
+  border-width: 0px 0px 1px 0px;
+  border-style: none none solid none;
+  white-space: nowrap;
+  width: 100%;
+}
+.listitem .icon {
+  display: inline-block;
+  vertical-align: middle;
+}
+/* list padding, scale these together */
+.listitem { padding: 0.5em; }
+.listitem .icon { margin-right: 0.5em; }
+/* list icon size */
+.listitem .icon { width: 2.5em; height: 2.5em; }
+
+.listitem .text {
+  display: inline-block;
+  vertical-align: middle;
+  width: calc( 100% - 3.5em );
+}
+
+.listitem .text .textline {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.duration {
+  color: grey;
+}
+
+.listitem .text .textline-song {
+  font-weight: bold;
+}
+
+// .player {
+//   //position: absolute; // prevent the cell from seeing the children, so we get an even 3 columns with play controls in center...
+//   height: 100%;
+//   vertical-align: middle;
+//   //background-color:forestgreen;
+//   width: 100%;
+// }
+
+// .player .art {
+//   width: 40px;
+//   height: 40px;
+//   //background-color:ghostwhite;
+//   vertical-align: middle;
+//   display: inline-block;
+// }
+
+
+// .player .lines {
+//   margin: 0;
+//   padding: 0;
+//   //background-color:goldenrod;
+//   vertical-align: middle;
+//   width: 100%;
+// }
+// .player .lines .line {
+//   font-size: 1em;
+//   line-height: 1em;
+//   margin: 0;
+//   padding: 0;
+
+//   overflow: hidden;
+//   text-overflow: ellipsis;
+//   white-space: nowrap;
+//   width: calc( 50vw - 88px ) !important;
+// }
+
+
+.progress-bar {
+  position: fixed;
+  bottom: 120px;
+  height: 2em; // keep in sync with  .listing { padding-bottom }
+  padding: 0;
+  margin: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+.progress-amt {
+  width: 20%;
+  //height: 5px;
+  height: 100%;
+  transition: width 0.25s;
+  transition-timing-function: ease-in-out;
+  pointer-events: none; // only progress-bar gets clicks, for proper calculation
+  align-items:baseline;
+  margin-top: auto; // align progress indicator to the bottom
+}
+
+
+.footer {
+  //background-color:firebrick;
+  position: fixed;
+  bottom: 0;
+  width: 100%;
+  height: 60px; /* Set the fixed height of the footer here */
+  //line-height: 60px; /* Vertically center the text there */
+  //white-space: nowrap;
+  //column-count: 3;
+  padding: 0;
+  margin: 0;
+}
+.footer {
+  background-color: rgb(48,48,48);
+}
+.progress-bar {
+  // alpha gradient showing what's under, we need some thickness
+  // for touch compatibility, but a thick bar looks chunky and unbalanced,
+  // so, make it look svelt while allowing chunky touch interaction
+  background-image: linear-gradient(rgba(48,48,48,0), rgba(48,48,48,1));
+  background-color: rgba(48,48,48,0);
+
+  // define the top extent of the touch area
+  //border-top: 1px solid rgba(48,48,48,0.8);
+}
+.progress-amt {
+  // gradient resembling fire, we need some thickness
+  // for touch compatibility, but a thick red bar looks chunky,
+  // so, make it look svelt while allowing chunky touch interaction
+  background-image: linear-gradient(rgba(192,96,96,0), rgba(192,96,96,0.05), rgba(192,96,96,0.25), rgba(192,96,96,1));
+  background-color: rgba(192,96,96,0);
+
+  // define the top extent of the touch area (in red)
+  border-top: 1px solid rgba(192,96,96,0.8);
+}
+
+
+
+
+.footer-right, .footer-left {
+  display: inline-block;
+  width: calc( 50vw - 48px );
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.footer-center {
+  display: inline-block;
+  width: 96px;
+  min-width: 96px;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.footer-flexcell {
+  display: flex;
+  align-items: center;
+  height:60px;
+}
+.footer-center .footer-flexcell {
+  align-items: center;
+  justify-content: center;
+}
+
+.player-text {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-text-group {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
+
+.footer {
+  height: 120px;
+}
+.footer-left {
+  width: 100%;
+}
+.footer-center {
+  display: inline-block;
+  width: calc( 100% - 120px );
+  min-width: calc( 100% - 120px );
+}
+.footer-right {
+  width: 120px;
+}
+
+// Small devices (landscape phones, 576px and up)
+@media (min-width: 576px) {
+  .footer {
+    height: 60px;
+  }
+  .footer-center {
+    display: inline-block;
+    width: 96px;
+    min-width: 96px;
+  }
+  .footer-right, .footer-left {
+    width: calc( 50vw - 48px );
+  }
+  .listing {
+    padding-bottom: calc( 60px + 2em );
+  }
+  .player-text {
+    width: calc( 50vw - 108px ) !important;
+  }
+
+  /* padding for the list, scale these together */
+  .listitem { padding: 1em; }
+  .listitem .icon { margin-right: 1em; }
+
+  /* list icon size */
+  .listitem .icon { width: 3.5em; height: 3.5em; }
+
+  .progress-bar {
+    bottom: 60px;
+  }
+}
+
+
+// https://stackoverflow.com/questions/22252472/how-to-change-the-color-of-an-svg-element
+.svg-filter-white {
+  filter: invert(100%) sepia(1%) saturate(7484%) hue-rotate(161deg) brightness(103%) contrast(99%);
+}
