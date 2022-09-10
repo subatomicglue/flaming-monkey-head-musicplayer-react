@@ -2,7 +2,7 @@
   "name": "flaming-monkey-head-music-player",
   "version": "1.0.0",
   "URL": "https://www.subatomiclabs.com/",
-  "description": "A music player for local music files, m4a, mp3, wav, aac",
+  "description": "A music player for local/uPNP/DLNA, m4a, mp3, wav, aac; electron Desktop app",
   "homepage": "https://www.subatomiclabs.com",
   "author": {
     "name": "K.Meinert ",
@@ -11,9 +11,9 @@
   },
   "contributors": [
     {
-      "name": "Amila Welihinda",
-      "email": "amilajack@gmail.com",
-      "url": "https://github.com/amilajack"
+      "name": "Kevin Meinert",
+      "email": "kevinNOSPAMMMMREMOVETHIS@subatomicglue.com",
+      "url": "https://github.com/subatomicglue"
     }
   ],
   "email": "kevinNOSPAMMMMREMOVETHIS@subatomicglue.com",
@@ -24,14 +24,16 @@
     "aac",
     "mp4",
     "raspberry pi",
-    "local files"
+    "local files",
+    "uPNP",
+    "DLNA"
   ],
   "bugs": {
-    "url": "https://github.com/electron-react-boilerplate/electron-react-boilerplate/issues"
+    "url": "https://github.com/flaming-monkey-head-musicplayer-react/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/electron-react-boilerplate/electron-react-boilerplate.git"
+    "url": "git+https://github.com/flaming-monkey-head-musicplayer-react.git"
   },
   "license": "MIT",
   "main": "./src/main/main.ts",
@@ -44,7 +46,7 @@
     "package": "export NG_CLI_ANALYTICS=\"false\" && ts-node ./.erb/scripts/clean.js dist && npm run build && electron-builder build --publish never",
     "package-rpi": "export USE_SYSTEM_FPM=\"true\" && export NG_CLI_ANALYTICS=\"false\" && ts-node ./.erb/scripts/clean.js dist && npm run build && electron-builder build  --dir --armv7l --linux deb --publish=never",
     "rebuild": "electron-rebuild --parallel --types prod,dev,optional --module-dir release/app",
-    "icon": "./set_macos_dev_icon.sh",
+    "icon": "ELECTRON_DEV_APP=\"node_modules/electron/dist/Electron.app\" && ELECTRON_DEV_APP_ICON=\"$ELECTRON_DEV_APP/Contents/Resources/electron.icns\" && cp ./assets/icon.icns \"$ELECTRON_DEV_APP_ICON\" && touch \"$ELECTRON_DEV_APP\"",
     "start": "ts-node ./.erb/scripts/check-port-in-use.js && npm run start:renderer",
     "start:main": "cross-env NODE_ENV=development electronmon -r ts-node/register/transpile-only .",
     "start:preload": "cross-env NODE_ENV=development TS_NODE_TRANSPILE_ONLY=true webpack --config ./.erb/configs/webpack.config.preload.dev.ts",
@@ -173,6 +175,7 @@
     "jest": "^28.1.3",
     "jest-environment-jsdom": "^28.1.3",
     "lint-staged": "^13.0.3",
+    "material-icons": "1.2.0",
     "mini-css-extract-plugin": "^2.6.1",
     "prettier": "^2.7.1",
     "react-refresh": "^0.14.0",
@@ -191,8 +194,7 @@
     "webpack-bundle-analyzer": "^4.5.0",
     "webpack-cli": "^4.10.0",
     "webpack-dev-server": "^4.10.0",
-    "webpack-merge": "^5.8.0",
-    "material-icons": "1.2.0"
+    "webpack-merge": "^5.8.0"
   },
   "build": {
     "productName": "FlamingMonkeyHeadMusicPlayer",
