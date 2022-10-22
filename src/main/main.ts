@@ -9,6 +9,9 @@
  * `./src/main.js` using webpack. This gives us some performance wins.
  */
 import { autoUpdater } from 'electron-updater';
+const Store = require('electron-store');
+//Store.initRenderer();
+const settings = new Store();
 import log from 'electron-log';
 import MenuBuilder from './menu';
 import { resolveHtmlPath } from './util';
@@ -19,8 +22,9 @@ import * as fs from 'fs';
 import * as url from 'url';
 import isPi from 'detect-rpi'; // detect raspberry pi
 import mediafs from 'media-fsjs/media-fs';
+console.log( "[main] init media fs")
 mediafs.init({ configname: "settings.json", appname: "flaming-monkey-head" });
-mediafs.setVerbose( true );
+mediafs.setVerbose( false );
 
 const env = process.env.NODE_ENV || 'development';
 let VERBOSE = false;//env != 'development' ? false : true;
@@ -161,6 +165,40 @@ ipcMain.handle('mediafs', async (event, FUNC, ...values) => {
   return result;
 })
 
+ipcMain.handle('settings', async (event, FUNC, ...values) => {
+  let name='settings'
+  let lib = settings;
+  let result = lib.hasOwnProperty( FUNC ) ? await lib[FUNC](...values) : `ERROR: no such function as ${name}.${FUNC}(...)`;
+  consoleLogIPC( "main.ts", name, FUNC, values, result )
+  return result;
+})
+
+ipcMain.handle('loadBrowserLocalStorage', async (event) => await loadBrowserLocalStorage() )
+ipcMain.handle('saveBrowserLocalStorage', async (event) => await saveBrowserLocalStorage() )
+
+async function saveBrowserLocalStorage() {
+  if (mainWindow)
+    mainWindow.webContents
+      .executeJavaScript('({...localStorage});', true)
+      .then(ls => {
+        settings.set( "browser-localStorage", JSON.stringify( ls ) )
+        //console.log("localStorage", ls);
+      });
+}
+async function loadBrowserLocalStorage() {
+  // init Local Store
+  // https://www.npmjs.com/package/electron-store
+  let ls = settings.get('browser-localStorage')
+  if (ls && mainWindow) {
+    ls = JSON.parse( ls );
+    let js = Object.keys(ls).map( r => `localStorage.setItem( "${r}", "${ls[r].replace( /["]/g, `\\"` )}" );` ).join( "\n" );
+    //console.log( "[main.ts] sending js to the renderer:\n", js )
+    let r = await mainWindow.webContents.executeJavaScript( js + "({...localStorage});", true )
+    //console.log( "[main.ts] localStorage set to", r )
+  }
+}
+
+
 function getMime( filename ) {
   switch (getExt( filename )) {
     case ".jpg": return "image/jpeg";
@@ -256,18 +294,21 @@ const createWindow = async () => {
     height: 728,
     icon: getAssetPath( 'icon.png' ),
     webPreferences: {
-      //webSecurity: false, // allow file://
-      //allowRunningInsecureContent: true,
+      enableRemoteModule: true, // <-- Add me
+      //webSecurity: false,                 // THIS SEEMS TO ALSO ENABLE InsecureContent....  xxxxxx maybe not safe in this case: //////it is SAFE to disable when we interceptFileProtocol('file') and handle all file:// access ourselves. (otherwise we write our own handler for res:// where we STILL have to gaurentee security for the filesystem, meh, webSecurity:true is default for when we dont have interceptFileProtocol('file'))
+      //allowRunningInsecureContent: false,  // true - allows running .js downloaded from external addresses (not secure, we dont want this)
       sandbox: false,
       preload: app.isPackaged
         ? path.join(__dirname, 'preload.js')
         : path.join(__dirname, '../../.erb/dll/preload.js'),
+
     },
   });
 
   mainWindow.loadURL(resolveHtmlPath('index.html'));
 
-  mainWindow.on('ready-to-show', () => {
+  mainWindow.on('ready-to-show', async () => {
+    console.log( "[main.ts] ready to show" )
     if (!mainWindow) {
       throw new Error('"mainWindow" is not defined');
     }
@@ -278,7 +319,15 @@ const createWindow = async () => {
     }
   });
 
+  mainWindow.on('close', () => {
+    console.log( "[main.ts] closing" )
+    if (mainWindow) {
+      saveBrowserLocalStorage();
+    }
+  });
+
   mainWindow.on('closed', () => {
+    console.log( "[main.ts] closed" )
     mainWindow = null;
   });
 
@@ -291,6 +340,25 @@ const createWindow = async () => {
     return { action: 'deny' };
   });
 
+  mainWindow.webContents.on('did-start-loading', (e) => {
+    console.log( "[main.ts] did-start-loading" )
+    //createLoadingWindow();
+  });
+
+  mainWindow.webContents.on('did-stop-loading', (e) => {
+    console.log( "[main.ts] did-stop-loading" )
+    //closeLoadingWindow();
+  });
+
+  mainWindow.webContents.on('did-finish-load', (e) => {
+    console.log( "[main.ts] did-finish-load" )
+    //createLoadingWindow();
+  });
+
+  mainWindow.webContents.on('dom-ready', (e) => {
+    console.log( "[main.ts] dom-ready" )
+  });
+
   // Remove this if your app does not use auto updates
   // eslint-disable-next-line
   new AppUpdater();
@@ -301,20 +369,23 @@ const createWindow = async () => {
  */
 
 app.on('window-all-closed', () => {
-  // Respect the OSX convention of having the application in memory even
-  // after all windows have been closed
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+  console.log( "[window-all-closed] app.quit()" )
+  app.quit();
+});
+
+process.on('exit', () => {
+  console.log( "[exit] app.quit()" )
+  app.quit();
 });
 
 app
   .whenReady()
   .then(() => {
 
-    console.log( "[main.ts] appData:", app.getPath('appData') );
+    console.log( "[main.ts] appData: ", app.getPath('appData') );
     console.log( "[main.ts] userData:", app.getPath('userData') );
-    console.log( "[main.ts] userdir:", userdir );
+    console.log( "[main.ts] settings:", settings.path );
+    console.log( "[main.ts] userdir: ", userdir );
     createWindow();
     app.on('activate', () => {
       // On macOS it's common to re-create a window in the app when the

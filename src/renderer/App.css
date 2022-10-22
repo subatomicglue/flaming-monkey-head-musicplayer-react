@@ -422,3 +422,10 @@ H1 {
 .svg-filter-white {
   filter: invert(100%) sepia(1%) saturate(7484%) hue-rotate(161deg) brightness(103%) contrast(99%);
 }
+
+
+@keyframes fadeIn {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+.fade-in { animation: fadeIn .2s; }

@@ -1,12 +1,12 @@
 {
-  "name": "electron-react-boilerplate",
-  "version": "4.6.0",
-  "description": "A foundation for scalable desktop apps",
+  "name": "flaming-monkey-head-music-player",
+  "version": "1.0.0",
+  "description": "A music player for local/uPNP/DLNA, m4a, mp3, wav, aac; electron Desktop ap",
   "license": "MIT",
   "author": {
-    "name": "Electron React Boilerplate Maintainers",
-    "email": "electronreactboilerplate@gmail.com",
-    "url": "https://github.com/electron-react-boilerplate"
+    "name": "K.Meinert ",
+    "email": "kevinNOSPAMMMMREMOVETHIS@subatomicglue.com",
+    "url": "https://www.subatomiclabs.com"
   },
   "main": "./dist/main/main.js",
   "scripts": {

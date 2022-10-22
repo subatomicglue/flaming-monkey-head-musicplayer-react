@@ -3,7 +3,7 @@ import { contextBridge, ipcRenderer, IpcRendererEvent, MouseInputEvent } from 'e
 import { MouseEventHandler, SyntheticEvent, useEffect, useLayoutEffect, useMutationEffect, useState } from "react";
 import { Link, NavLink, Outlet, MemoryRouter as Router, Routes, Route, useSearchParams, useParams,
   useNavigate,
-  useLocation, } from 'react-router-dom'; // https://github.com/remix-run/react-router/blob/main/docs/getting-started/tutorial.md
+  useLocation, Navigate, createSearchParams } from 'react-router-dom'; // https://github.com/remix-run/react-router/blob/main/docs/getting-started/tutorial.md
 
 import './App.css';
 import 'material-icons';
@@ -13,6 +13,13 @@ import defaultpng from "/assets/default.png"; // auto copy the default icon over
 const xhr = require('xhrjs/xhr').init( XMLHttpRequest ).xhr;
 const xhrAuth = require('xhrjs/xhr').init( XMLHttpRequest ).xhrAuth;
 //import xhr from "xhrjs/xhr.js";
+
+async function saveBrowserLocalStorage() {
+  await window.electron.invoke( "saveBrowserLocalStorage" );
+}
+async function loadBrowserLocalStorage() {
+  await window.electron.invoke( "loadBrowserLocalStorage" );
+}
 
 function protocolFilter( i ) {
   // auto copy the default icon over to the build folder
@@ -33,6 +40,12 @@ function protocolFilter( i ) {
   return i.replace(/^file:/,"res:")
 }
 
+// deeply clone an object hierarchy
+function deepClone( obj ) {
+  if (obj == undefined) return undefined;
+  return JSON.parse( JSON.stringify( obj ) );
+}
+
 
 
 class Player {
@@ -42,23 +55,45 @@ class Player {
   progressamt:string = "0%";
   mode:number = 0;
   timer:any;
-  audio:any = undefined;
+  audio:typeof Audio;
   onTrackChange = (track, i, listing) => {};
   onPlayerTransportChange = (state) => {};
   onModeChange = (mode) => {};
-  onNavigate = (navigate) => {};
+  onNavigate = (url) => {};
   onProgressChange = (progress_amt) => {};
   onListingChange = (l) => {};
+
+  constructor() {
+    this.audio = window.audio; // persist across webpack HMR (hot module reload)
+    let playing = localStorage.getItem( "playing" ); // persist across webpack HMR (hot module reload) and app reload
+    this.playing = playing ? JSON.parse( playing ) : this.playing;
+    console.log(this.playing )
+
+    window.addEventListener('online', () => {
+      console.log( "[Player] online" )
+    })
+    window.addEventListener('offline', () => {
+      console.log( "[Player] offline" )
+      this.track_stop();
+    })
+  }
 
   release() {
     if (this.audio) delete this.audio;
   }
 
-  onKeyDown(e) {
-    if(e.keyCode === 13) {
-        console.log('Enter key pressed')
+  onKeyDown( e:KeyboardEvent ) {
+    console.log( e.code )
+    if (e.code=="Space" && !e.repeat) {
+      this.isPlaying() ? this.track_pause() : this.track_play()
     }
+    if (e.code=="KeyE" && !e.repeat) {
+
+      this.track_play() //
+    }
+    e.preventDefault();
   }
+  isPlaying() { return this.audio && !this.audio.paused; }
 
   modes = [
     "play_all", "play_1", "repeat_1", "repeat_all",
@@ -80,21 +115,27 @@ class Player {
   progressStart(e) { this.progress_manipulating = true; this.progressMove( e ); /*console.log( "progress start" )*/ }
   progressEnd(e) { this.progress_manipulating = false; this.progressMove( e ); /*console.log( "progress end" )*/ }
   track_play() {
-    if (!this.playing.track) return;
+    if (!this.playing || !this.playing.track || this.isPlaying()) return;
 
     // play a stopped track
-    if (!this.audio) { this.playAudio( this.playing.track, this.playing.index, this.playing.listing ); console.log( "play stopped", this.playing.index ); return; }
+    if (!this.audio) {
+      console.log( "play stopped", this.playing.index );
+      this.playAudio( this.playing.track, this.playing.index, this.playing.listing );
+      return;
+    }
 
     // unpause existing track
     this.audio.volume = 1;
     this.audio.play();
     this.updateTrackTime();
 
-    // timer = setInterval( () => {
+    // timer = setInterval( () => {//
     //   currentTime = HomeComponent.formatTime( audio.currentTime );
     // }, 1000 );
   }
   track_pause() {
+    if (this.playing && this.playing.track && !this.isPlaying()) return;
+
     this.audio.pause();
 
     // clearInterval( timer );
@@ -112,13 +153,13 @@ class Player {
       if (0 <= next_i && next_i <= (this.playing.listing.length - 1)) {
         //console.log( i, next_i, (playing.listing.length - 1), playing.listing[next_i], playing.listing )
         this.playAudio( this.playing.listing[next_i], next_i, this.playing.listing )
-        console.log( "[track_inc:playAudio]", next_i );
+        console.log( "[Player] track_inc:playAudio", next_i );
       }
       else {
         // allow index to go off the end of the dir listing...
         this.playing.index = inc < 0 ? -1 : this.playing.listing.length;
         this.killAudio();
-        console.log( "[track_inc:killAudio]", this.playing.index );
+        console.log( "[Player] track_inc:killAudio", this.playing.index );
       }
     }
   }
@@ -174,9 +215,11 @@ class Player {
   async playAudio( f, i, listing ) {
     this.killAudio();
     this.playing.index = i;
-    this.playing.track = f;
-    this.playing.listing = listing;
-    console.log( "[playAudio]", i );
+    this.playing.track = deepClone( f );
+    this.playing.listing = deepClone( listing );
+    console.log( "[Player] playAudio", i );
+
+    localStorage.setItem( "playing", JSON.stringify( this.playing ) ); // persist across webpack HMR (hot module reload) and app reload
 
     //console.log( "xhr", f.content );
     //let data = await xhr( "GET", "res://" + f.content,  {}/*{'Content-Type': 'application/octet-stream' }*/ );
@@ -186,9 +229,7 @@ class Player {
     //return;
 
     this.audio = new Audio();
-    //this.audio.src = data;
-    this.audio.src = protocolFilter( f.content );
-    this.audio.load();
+    window.audio = this.audio; // persist across webpack HMR (hot module reload)
 
     // auto next track, when track ends:
     this.audio.onended = (event) => {
@@ -198,7 +239,7 @@ class Player {
 
       let i = this.playing.index;
       let next_i = i;
-      console.log( "Track Ended (processing repeat mode): ", this.modes[this.mode] );
+      console.log( "[Player] Track Ended (processing repeat mode): ", this.modes[this.mode] );
       switch (this.modes[this.mode]) {
         case "play_1": next_i = i; break;
         case "repeat_1": next_i = i; break;
@@ -222,6 +263,12 @@ class Player {
 
     this.audio.onpause = () => { this.onPlayerTransportChange( "paused" ); }
     this.audio.onplay = () => { this.onPlayerTransportChange( "playing" ); }
+    this.audio.oncanplay = () => {
+      this.track_play();
+      this.scrollTo( "item" + i )
+      console.log( "[Player] play", i, f, listing )
+      this.onTrackChange( f, i, listing );
+    }
 
     // ramp the audio to silence before it ends...
     let volume_ramp_granularity = 0.01;
@@ -233,10 +280,9 @@ class Player {
       }
     }, volume_ramp_granularity * 1000 );
 
-    this.track_play();
-    this.scrollTo( "item" + i )
-    console.log( "play", i, f, listing )
-    this.onTrackChange( f, i, listing );
+    //this.audio.src = data;
+    this.audio.src = protocolFilter( f.content );
+    this.audio.load();
   }
   killAudio() {
     if (!this.audio) return;
@@ -255,7 +301,7 @@ class Player {
 
   click( f, i, listing ) {
     if (f.type == "dir") {
-      console.log( "[changeroute]", f.abs_path, f.type, i );
+      console.log( "[Player] changeroute", f.abs_path, f.type, i );
       this.onNavigate( f.abs_path )
     } else {
       this.playAudio( f, i, listing )
@@ -265,68 +311,17 @@ class Player {
 
 let player = new Player();
 
-const MediaBrowser =  () => {
-  let navigate = useNavigate();
-  let location = useLocation();
-  let params = useParams();
-  let path = location.pathname;
-
-  // the heavy hand
-  let [__rerender, __setRerender] = useState(0);      function render() { __setRerender(__rerender+1); }
-
-  // player state:
-  let [listing, setListing] = useState( [] );
-  let [progressamt, setProgressAmt] = useState(player.progressamt);
-  let [track, setTrack] = useState(player.playing.track);
-  let [mode, setMode] = useState(player.mode);
-  let [player_state, setPlayerTransport] = useState("paused");
-  let [folderimage, setFolderImage] = useState(icon);
-
-  console.log( "url path:", location.pathname );
-
-  useEffect(() => {
-    player.onNavigate = (url) => { navigate( url ); }
-    player.onProgressChange = (p) => { setProgressAmt( p ) };
-    player.onTrackChange = (t, i, l) => { setTrack( t ) };
-    player.onPlayerTransportChange = (state) => { setPlayerTransport(state) };
-    player.onModeChange = (mode) => { setMode( mode ) };
-    console.log('mounted');
-    return () => {
-      console.log('====================UNMOUNT======================');
-      player.release();
-    }
-  }, [])  // <-- add this empty array here
-
-  useEffect( () => {
-      async function doAsyncStuff() {
-        let l = await window.electron.invoke( "mediafs", "dir", location.pathname, undefined, false );
-        let curdir = l.filter( r => r.path == "." );
-        l = l.filter( r => r.path != "." );
-        setListing( l );
-        setFolderImage( curdir.length > 0 && curdir[0].image ? curdir[0].image.match( /default/ ) ? icon : curdir[0].image : icon )
-        console.log( "URL:", location.pathname );
-        console.log( JSON.stringify( l, null, 1 ) );
-        //console.log( listing ? listing.map( r => JSON.stringify( r ) + "\n" ) : "null" );
-      }
-      doAsyncStuff();
-      return () => { /*cleanup*/}
-    },
-    [location.pathname], // [args, ...] rerun when any of these change.   [] -> only on mount/unmount (once ever)
-  );
-  // useLayoutEffect( () => {
-  //     return () => {/*cleanup*/}
-  //   },
-  //   [mode, audio, playing, playing.track, progressamt, currentTime, playing.listing, playing.i], // [args, ...] rerun when any of these change.   [] -> only on mount/unmount (once ever)
-  // );
-
-
-  let dom2 = (
-    <div className="listing" onKeyPress={(e) => player.onKeyDown( e )}  onMouseUp={() => { player.progress_manipulating = false }} >
-
-    <img className="albumart" src={protocolFilter( folderimage )}></img><span className="button material-icons" onClick={ () => { navigate(-1) } }>arrow_back</span><span className="button material-icons" onClick={ () => { navigate("/") } }>home</span>
-
-    {(listing ? listing : []).map( (f:any, i:number) => (
-      <div key={"item" + i} id={"item" + i} onClick={() => { f.path == '..' ? player.click( { abs_path: path + '/..', type: 'dir' }, i, listing ) : player.click( f, i, listing ) }} className="listitem">
+const MediaList =  (props:any) => {
+  //let params = useParams();
+  let path = props.path;
+  let listing = props.listing;
+  let player_state = props.player_state;
+  let track = props.track;
+  let click_play = props.click_play;
+  // console.log( JSON.stringify( listing, null, 1 ) );
+  return (listing ? listing : []).map( (f:any, i:number) => (
+    <span key={"item" + i}>
+      <div className="fade-in listitem" id={"item" + i} onClick={() => { f.path == '..' ? click_play( { abs_path: path + '/..', type: 'dir' }, i, listing ) : click_play( f, i, listing ) }}>
 
         {f.path != '..' ?
           <img className="icon" src={protocolFilter(f.image)}></img>
@@ -346,43 +341,192 @@ const MediaBrowser =  () => {
             </div>}
         </div>
       </div>
-    ))}
+    </span>
+  ))
+}
 
+const MediaFooter = (props:any) => {
+  if (!props) return <div></div>
+  //let params = useParams();
+  let track = props.track ? props.track : { title: "", path: "", artist: "", album: "", image: defaultpng };
+  let player_state = props.player_state;
+  let mode = props.mode;
+  let progressamt = props.progressamt;
+  let [fullscreen_player, setFullScreenPlayer] = useState( JSON.parse( localStorage.getItem( "fullscreen_player" ) || "false" ) );  localStorage.setItem( "fullscreen_player", JSON.stringify( fullscreen_player ) );
 
-    {track &&
-      <div className="footer" style={{}}>
-        <div className="footer-left" style={{}}>
-          <div className="footer-flexcell">
-            <div className="" style={{ textAlign: "center", width: "60px" }}>
-              <img className="" style={{ width: "40px", height: "40px" }} src={protocolFilter( track.image )}></img>
-            </div>
-            <div className="player-text-group">
-              <div className="player-text"><strong>{track.title ? track.title : track.path}</strong></div>
-              <div className="player-text">{track.artist} - {track.album}</div>
-            </div>
+  let foot_mode = <span>
+    <div className="footer" style={{}}>
+      <div className="footer-left" style={{}}>
+        <div className="footer-flexcell">
+          <div className="" style={{ textAlign: "center", width: "60px" }}>
+            <img className="" style={{ width: "40px", height: "40px" }} src={protocolFilter( track.image )}></img>
           </div>
-        </div>
-        <div className="footer-center" style={{height:"60px", whiteSpace: "nowrap", verticalAlign: "middle", textAlign: "center", "overflow": "auto"}}>
-          <div className="footer-flexcell">
-            <div onClick={() => player.track_prev()} className="material-icons">skip_previous</div>{player_state == "playing" &&<div onClick={() => player.track_pause()} className="material-icons">pause</div>}
-              {player_state == "paused" &&
-                <div onClick={() => player.track_play()} className="material-icons-outlined">play_arrow</div>}
-              <div onClick={() => player.track_next()} className="material-icons">skip_next</div><div onClick={() => player.track_stop()} className="material-icons">close</div>
-          </div>
-        </div>
-        <div className="footer-right" style={{ minWidth: 0, height: "60px" }}>
-          <div className="footer-flexcell">
-            <div className="text-center w-100">{player.currentTime} <img onClick={() => player.toggleMode()} className="svg-filter-white" src={`/assets/${player.modes_repeaticon[mode]}.svg`}></img></div>
+          <div className="player-text-group">
+            <div className="player-text"><strong>{track.title ? track.title : track.path}</strong></div>
+            <div className="player-text">{track.artist} - {track.album}</div>
           </div>
         </div>
       </div>
+      <div className="footer-center" style={{height:"60px", whiteSpace: "nowrap", verticalAlign: "middle", textAlign: "center", "overflow": "auto"}}>
+        <div className="footer-flexcell">
+          <div onClick={() => player.track_prev()} className="material-icons">skip_previous</div>{player_state == "playing" &&<div onClick={() => player.track_pause()} className="material-icons">pause</div>}
+            {player_state == "paused" &&
+              <div onClick={() => player.track_play()} className="material-icons-outlined">play_arrow</div>}
+            <div onClick={() => player.track_next()} className="material-icons">skip_next</div><div onClick={() => player.track_stop()} className="material-icons">close</div>
+        </div>
+      </div>
+      <div className="footer-right" style={{ minWidth: 0, height: "60px" }}>
+        <div className="footer-flexcell">
+          <div className="text-center w-100">{player.currentTime} <img onClick={() => player.toggleMode()} className="svg-filter-white" src={`/assets/${player.modes_repeaticon[mode]}.svg`}></img></div>
+          <div onClick={() => setFullScreenPlayer(!fullscreen_player)}>^</div>
+        </div>
+      </div>
+    </div>
+    <div id="progress-bar" className="progress-bar" onMouseMove={(e) => player.progressMove(e)} onMouseDown={ (e)=> player.progressStart(e)} onMouseUp={ (e) => player.progressEnd(e) }><div id="progress-amt" className="progress-amt" style={{ 'width': progressamt }}>&nbsp;</div></div>
+  </span>
+
+  let full_mode = <span>
+    <div className="footer" style={{}}>
+      <div className="footer-left" style={{}}>
+        <div className="footer-flexcell">
+          <div className="" style={{ textAlign: "center", width: "60px" }}>
+            <img className="" style={{ width: "40px", height: "40px" }} src={protocolFilter( track.image )}></img>
+          </div>
+          <div className="player-text-group">
+            <div className="player-text"><strong>{track.title ? track.title : track.path}</strong></div>
+            <div className="player-text">{track.artist} - {track.album}</div>
+          </div>
+        </div>
+      </div>
+      <div className="footer-center" style={{height:"60px", whiteSpace: "nowrap", verticalAlign: "middle", textAlign: "center", "overflow": "auto"}}>
+        <div className="footer-flexcell">
+          <div onClick={() => player.track_prev()} className="material-icons">skip_previous</div>{player_state == "playing" &&<div onClick={() => player.track_pause()} className="material-icons">pause</div>}
+            {player_state == "paused" &&
+              <div onClick={() => player.track_play()} className="material-icons-outlined">play_arrow</div>}
+            <div onClick={() => player.track_next()} className="material-icons">skip_next</div><div onClick={() => player.track_stop()} className="material-icons">close</div>
+        </div>
+      </div>
+      <div className="footer-right" style={{ minWidth: 0, height: "60px" }}>
+        <div className="footer-flexcell">
+          <div className="text-center w-100">{player.currentTime} <img onClick={() => player.toggleMode()} className="svg-filter-white" src={`/assets/${player.modes_repeaticon[mode]}.svg`}></img></div>
+          <div onClick={() => setFullScreenPlayer(!fullscreen_player)}>v</div>
+        </div>
+      </div>
+    </div>
+    <div id="progress-bar" className="progress-bar" onMouseMove={(e) => player.progressMove(e)} onMouseDown={ (e)=> player.progressStart(e)} onMouseUp={ (e) => player.progressEnd(e) }><div id="progress-amt" className="progress-amt" style={{ 'width': progressamt }}>&nbsp;</div></div>
+  </span>
+  return fullscreen_player ? full_mode : foot_mode
+}
+
+const Header = (props) => {
+  let navigate = useNavigate();
+  const folderimage = props.folderimage
+  const root = props.root
+  const path = props.path
+  const setView = props.view
+  return <span>
+    <img className="albumart" src={protocolFilter( folderimage )}></img><span className="button material-icons" onClick={ () => { setView(`browse`); navigate(-1) } }>arrow_back</span><span className="button material-icons" onClick={ () => { setView(`browse`); navigate(1) } }>arrow_forward</span><span className="button material-icons" onClick={ () => { setView(`browse`); navigate(root) } }>home</span><span className="button material-icons" onClick={ () => { setView(`browse`) } }>folder</span><span className="button material-icons" onClick={ () => { setView(`queue`) } }>queue</span>
+  </span>
+}
+
+const Loading = () => {
+  return <div className="fade-in" style={{ position: "fixed", left: "0px", top: "0px", width: "100%", height: "100vh" , display: "flex", justifyContent: "center", alignItems: "center" }}>... loading ...</div>
+}
+
+const MediaBrowser =  (props:any) => {
+  let navigate = useNavigate();
+  let location = useLocation();
+  // let params = useParams();  // for parsing id and id2 from the router "/browse/:id/:id2/", etc...
+  let path:any = location.pathname //.replace( /^\/browse/, "" ); path = path == "" ? "/" : path;
+
+  // the heavy hand
+  let [__rerender, __setRerender] = useState(0);      function render() { __setRerender(__rerender+1); }
+
+  // player state:
+  let [listing, setListing] = useState( [] );
+  let [progressamt, setProgressAmt] = useState(player.progressamt);
+  let [track, setTrack] = useState(player.playing.track);
+  let [mode, setMode] = useState(player.mode);
+  let [player_state, setPlayerTransport] = useState("paused");
+  let [folderimage, setFolderImage] = useState(icon);
+  let [loading, setLoading] = useState(false);
+  let [view, setView] = useState("browse");
+
+  useEffect(() => {
+    loadBrowserLocalStorage().then( () => {
+      console.log( "load: lastURL", localStorage.getItem( "lastURL" ) )
+      if (localStorage.getItem( "lastURL" )) {
+        path = localStorage.getItem( "lastURL" );
+        console.log( "RESTORING URL", path )
+        navigate( path );
+      }
+      player.onNavigate = (url) => { navigate( `${url}` ); }
+      player.onProgressChange = (p) => { setProgressAmt( p ) };
+      player.onTrackChange = (t, i, l) => { setTrack( t ) };
+      player.onPlayerTransportChange = (state) => { setPlayerTransport(state) };   /* init */ setPlayerTransport( player.isPlaying() ? "playing" : "paused" )
+      player.onModeChange = (mode) => { setMode( mode ) };
+      window.addEventListener("keydown", (e) => player.onKeyDown( e ) );
+      console.log('mounted');
+    })
+    return () => {
+      window.removeEventListener("keydown", (e) => player.onKeyDown( e ) );
+      console.log('====================UNMOUNT======================');
+      player.release();
+      saveBrowserLocalStorage();
+    }
+  }, [])  // <-- add this empty array here,    [] -> only called on mount/unmount (once ever)
+
+  useEffect( () => {
+      async function doAsyncStuff() {
+        setLoading( true );
+
+        // pull a new browser listing
+        console.log( `[browse] URL: ${location.pathname}${location.search}` );
+        console.log( `[browse] dir( "${path}" )` );
+        localStorage.setItem( "lastURL", path );
+        // console.log( "save: lastURL", localStorage.getItem( "lastURL" ) )
+        let l = await window.electron.invoke( "mediafs", "dir", path, undefined, false );
+        let curdir = l.filter( r => r.path == "." );
+        l = l.filter( r => r.path != "." && r.path != ".." && !r.path.match( /^\./ ) );
+        setListing( l );
+        setFolderImage( curdir.length > 0 && curdir[0].image ? curdir[0].image.match( /default/ ) ? icon : curdir[0].image : icon )
+        //console.log( JSON.stringify( l, null, 1 ) );
+
+        setLoading( false );
+        await saveBrowserLocalStorage(); // periodically commit any changes to disk...
+      }
+      doAsyncStuff();
+      return () => { /*cleanup*/}
+    },
+    [location.pathname], // [args, ...] rerun when any of these change.   [] -> only on mount/unmount (once ever)
+  );
+  // useLayoutEffect( () => {
+  //     return () => {/*cleanup*/}
+  //   },
+  //   [mode, audio, playing, playing.track, progressamt, currentTime, playing.listing, playing.i], // [args, ...] rerun when any of these change.   [] -> only on mount/unmount (once ever)
+  // );
+
+
+  let dom2 = (
+    <div className="listing" onMouseUp={() => { player.progress_manipulating = false }} >
+
+    <Header path={path} root="" folderimage={folderimage} view={setView}></Header>
+    {loading && <Loading></Loading>}
+    {view == "browse" && !loading &&
+      <span>
+        <div onClick={() => navigate(path)}>media:{path}</div>
+        <MediaList path={path} listing={listing} player_state={player_state} track={track} click_play={ (...args:any) => { player.click( ...args )} }></MediaList>
+      </span>
+    }
+    {view == "queue" && !loading &&
+      <span>
+        <div>[NOW PLAYING]</div>
+        <MediaList path={path} listing={player.playing.listing} player_state={player_state} track={track} click_play={ (...args:any) => { player.click( ...args )} }></MediaList>
+      </span>
     }
 
-    {track &&
-      <div id="progress-bar" className="progress-bar" onMouseMove={(e) => player.progressMove(e)} onMouseDown={ (e)=> player.progressStart(e)} onMouseUp={ (e) => player.progressEnd(e) }><div id="progress-amt" className="progress-amt" style={{ 'width': progressamt }}>&nbsp;</div></div>
-    }
-
-  </div>
+    {track && <MediaFooter track={track} player_state={player_state} mode={mode} progressamt={progressamt}></MediaFooter>}
+    </div>
   );
 
   return dom2;
@@ -392,8 +536,9 @@ export default function App() {
   return (
     <Router>
       <Routes>
-        <Route path="*" element={<MediaBrowser />}>
-        </Route>
+        {/* <Route path="/queue/*" element={<MediaQueue />}></Route> */}
+        <Route path="*" element={<MediaBrowser />}></Route>
+        {/* <Route path="*" element={ <Navigate to="/browse" /> }></Route> */}
       </Routes>
     </Router>
   );
