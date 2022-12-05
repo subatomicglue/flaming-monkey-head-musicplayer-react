@@ -4,7 +4,7 @@ import { MouseEventHandler, SyntheticEvent, useEffect, useLayoutEffect, useMutat
 import { Link, NavLink, Outlet, MemoryRouter as Router, Routes, Route, useSearchParams, useParams,
   useNavigate,
   useLocation, Navigate, createSearchParams } from 'react-router-dom'; // https://github.com/remix-run/react-router/blob/main/docs/getting-started/tutorial.md
-
+import {Mutex, Semaphore, withTimeout} from 'async-mutex';
 import './App.css';
 import 'material-icons';
 //import 'bootstrap';
@@ -14,11 +14,45 @@ const xhr = require('xhrjs/xhr').init( XMLHttpRequest ).xhr;
 const xhrAuth = require('xhrjs/xhr').init( XMLHttpRequest ).xhrAuth;
 //import xhr from "xhrjs/xhr.js";
 
+let localStorage_Lock = new Mutex();
+let dataFetch_Lock = new Mutex();
+let last_browse_path = "/";
+
+let init_local_storage = false;
 async function saveBrowserLocalStorage() {
-  await window.electron.invoke( "saveBrowserLocalStorage" );
+  await localStorage_Lock.runExclusive( async () => {
+    await window.electron.invoke( "saveBrowserLocalStorage" );
+  });
 }
 async function loadBrowserLocalStorage() {
-  await window.electron.invoke( "loadBrowserLocalStorage" );
+  if (init_local_storage) return;
+  await localStorage_Lock.runExclusive( async () => {
+    if (init_local_storage) return;
+    await window.electron.invoke( "loadBrowserLocalStorage" );
+    init_local_storage = true;
+  })
+}
+
+async function waitForValue( value_func, should_be, timeout_sec = 5 ) {
+  return new Promise( (rs, rj) => {
+    if (value_func() == should_be) return rs();
+    let startTime = new Date();
+    let handle = setInterval( () => {
+      let endTime = new Date();
+      var timeDiff = (endTime - startTime)/1000;
+      if (timeout_sec < timeDiff && timeout_sec != -1) {
+        console.log( "timeout! v:", v )
+        clearInterval( handle );
+        return rs();
+      } else if (value_func() == should_be) {
+        console.log( "it's finally true! timeout_sec:", timeout_sec )
+        clearInterval( handle );
+        return rs();
+      } else {
+        console.log( `waiting for '${value_func()}' to be '${should_be}'...1` )
+      }
+    }, 1)
+  })
 }
 
 function protocolFilter( i ) {
@@ -37,7 +71,7 @@ function protocolFilter( i ) {
   //   fetch( i.replace(/^file:/,"res:") );
   // }
 
-  return i.replace(/^file:/,"res:")
+  return i ? i.replace(/^file:/,"res:") : defaultpng;
 }
 
 // deeply clone an object hierarchy
@@ -51,7 +85,7 @@ function deepClone( obj ) {
 class Player {
   progress_manipulating:boolean = false;
   playing:any = { i: 0, listing: [], track: undefined };//{ title: "1", artist: "2", album: "3", path: "4", abs_path: "bok", image: defaultpng } };
-  currentTime:string = "03:45:65";
+  currentTime:string = "--:--:--";
   progressamt:string = "0%";
   mode:number = 0;
   timer:any;
@@ -60,7 +94,7 @@ class Player {
   onPlayerTransportChange = (state) => {};
   onModeChange = (mode) => {};
   onNavigate = (url) => {};
-  onProgressChange = (progress_amt) => {};
+  onProgressChange = (progress_amt, progress_time) => {};
   onListingChange = (l) => {};
 
   constructor() {
@@ -80,6 +114,15 @@ class Player {
 
   release() {
     if (this.audio) delete this.audio;
+  }
+
+  resendState() {
+    console.log( "[Player] resending state..." );
+    this.onTrackChange && this.onTrackChange(this.playing.track, this.playing.i, this.playing.listing);
+    this.onPlayerTransportChange && this.onPlayerTransportChange( this.isPlaying() ? "playing" : "paused" );
+    this.onModeChange && this.onModeChange( this.mode );
+    this.onProgressChange && this.onProgressChange( this.progressamt, this.currentTime );
+    this.onListingChange && this.onListingChange( this.playing.listing );
   }
 
   onKeyDown( e:KeyboardEvent ) {
@@ -102,6 +145,7 @@ class Player {
     "play_black_24dp", "play_one_black_24dp", "repeat_one_black_24dp", "repeat_black_24dp",
   ];
 
+  // user has moved the mouse in the progress bar...
   progressMove( e ){
     if (this.progress_manipulating) {
       // react gives us a cross browser SyntheticEvent (e.nativeEvent is present); browser gives us MouseEvent...
@@ -112,6 +156,7 @@ class Player {
       //console.log( "progress interaction", amt )
     }
   }
+  // user has clicked on the progress bar
   progressStart(e) { this.progress_manipulating = true; this.progressMove( e ); /*console.log( "progress start" )*/ }
   progressEnd(e) { this.progress_manipulating = false; this.progressMove( e ); /*console.log( "progress end" )*/ }
   track_play() {
@@ -205,7 +250,7 @@ class Player {
   updateTrackTime() {
     this.currentTime = this.audio ? this.formatTime( this.audio.currentTime ) : "--:--"
     this.progressamt = this.audio ? `${this.audio.currentTime == 0 ? 0 : (this.audio.currentTime / this.audio.duration) * 100}%` : '0%';
-    this.onProgressChange( this.progressamt );
+    this.onProgressChange( this.progressamt, this.currentTime );
     //console.log( "progress:", progressamt, "time:", currentTime );
   }
   toggleMode() {
@@ -299,17 +344,18 @@ class Player {
     delete this.audio;
   }
 
-  click( f, i, listing ) {
+  click( f, i, listing, url_prefix, url_after_play = undefined ) {
     if (f.type == "dir") {
-      console.log( "[Player] changeroute", f.abs_path, f.type, i );
-      this.onNavigate( f.abs_path )
+      console.log( "[Player] changeroute", `${url_prefix}${f.abs_path}`, f.type, i );
+      this.onNavigate( `${url_prefix}${f.abs_path}` )
     } else {
       this.playAudio( f, i, listing )
+      if (url_after_play) this.onNavigate( url_after_play )
     }
   }
 }
 
-let player = new Player();
+let player = window.player ? window.player : window.player = new Player(); // persist the player after HMR (hot reload)
 
 const MediaList =  (props:any) => {
   //let params = useParams();
@@ -377,26 +423,104 @@ const MediaFooter = (props:any) => {
       </div>
       <div className="footer-right" style={{ minWidth: 0, height: "60px" }}>
         <div className="footer-flexcell">
-          <div className="text-center w-100">{player.currentTime} <img onClick={() => player.toggleMode()} className="svg-filter-white" src={`/assets/${player.modes_repeaticon[mode]}.svg`}></img></div>
-          <div onClick={() => setFullScreenPlayer(!fullscreen_player)}>^</div>
+          <div className="text-center w-100">{player.currentTime} <img onClick={() => player.toggleMode()} className="svg-filter-white" src={protocolFilter( `file://assets/${player.modes_repeaticon[mode]}.svg` )}></img></div>
         </div>
       </div>
     </div>
     <div id="progress-bar" className="progress-bar" onMouseMove={(e) => player.progressMove(e)} onMouseDown={ (e)=> player.progressStart(e)} onMouseUp={ (e) => player.progressEnd(e) }><div id="progress-amt" className="progress-amt" style={{ 'width': progressamt }}>&nbsp;</div></div>
   </span>
 
+  return foot_mode
+}
+
+
+const Header = (props) => {
+  let navigate = useNavigate();
+  const folderimage = props.folderimage
+  const root = props.root
+  const path = props.path
+  const setView = props.view
+  return <span>
+    <img className="albumart" src={protocolFilter( folderimage )}></img>
+    <span className="button material-icons" onClick={ () => { navigate(-1) } }>arrow_back</span>
+    <span className="button material-icons" onClick={ () => { navigate(1) } }>arrow_forward</span>
+    <span className="button material-icons" onClick={ () => { navigate( "/browse" + last_browse_path ) } }>folder</span>
+    <span className="button material-icons" onClick={ () => { navigate( "/queue" ) } }>playlist_add</span>
+    <span className="button material-icons" onClick={ () => { navigate( "/player" ) } }>ondemand_video</span>
+  </span>
+}
+
+const Loading = () => {
+  return <div className="fade-in" style={{ position: "fixed", left: "0px", top: "0px", width: "100%", height: "100vh" , display: "flex", justifyContent: "center", alignItems: "center" }}>... loading ...</div>
+}
+
+let init_once = true;
+async function init( navigate_func = (url:string) => {}, location ) {
+  if (init_once) {
+    await loadBrowserLocalStorage();
+    let url = localStorage.getItem( "lastURL" );
+    if (url) {
+        console.log( "RESTORING URL", url )
+        navigate_func( url );
+    }
+  } else {
+    console.log( "SAVE URL:", location.pathname )
+    localStorage.setItem( "lastURL", location.pathname );
+  }
+  init_once = false;
+}
+
+const MediaPlayer = (props:any) => {
+  if (!props) return <div></div>
+  //let params = useParams();
+  let navigate = useNavigate();
+  let location = useLocation();
+
+  // player state:
+  let [progressamt, setProgressAmt] = useState(player.progressamt);
+  let [progresstime, setProgressTime] = useState(player.currentTime);
+  let [track, setTrack] = useState(player.playing.track);
+  let [mode, setMode] = useState(player.mode);
+  let [player_state, setPlayerTransport] = useState("paused");
+
+  // only called on mount/unmount
+  useEffect(() => {
+    console.log('[MediaPlayer] init......');
+    init( navigate, location ).then( () => {
+      player.onNavigate = (url) => { console.log( "[MediaPlayer] onNavigate", `${url}` ); navigate( `${url}` ); }
+      player.onProgressChange = (amt, time) => { setProgressAmt( amt ); setProgressTime( time ); };
+      player.onTrackChange = (t, i, l) => { setTrack( t ) };
+      player.onPlayerTransportChange = (state) => { setPlayerTransport(state) };
+      player.onModeChange = (mode) => { setMode( mode ) };
+      player.resendState();
+      window.addEventListener("keydown", (e) => player.onKeyDown( e ) );
+      console.log('[MediaPlayer] MOUNT');
+    })
+    return () => {
+      window.removeEventListener("keydown", (e) => player.onKeyDown( e ) );
+      console.log('[MediaPlayer] UNMOUNT');
+      saveBrowserLocalStorage();
+    }
+  }, [])  // [] -> only called on mount/unmount (once ever) .
+
+  // called every time
+  useEffect( () => {
+      init( navigate, location ).then( async () => {
+        // do nothing
+      });
+      return () => { /*cleanup*/}
+    },
+    [location.pathname], // [args, ...] rerun when any of these change.
+  );
+
   let full_mode = <span>
-    <div className="footer" style={{}}>
-      <div className="footer-left" style={{}}>
-        <div className="footer-flexcell">
-          <div className="" style={{ textAlign: "center", width: "60px" }}>
-            <img className="" style={{ width: "40px", height: "40px" }} src={protocolFilter( track.image )}></img>
-          </div>
-          <div className="player-text-group">
-            <div className="player-text"><strong>{track.title ? track.title : track.path}</strong></div>
-            <div className="player-text">{track.artist} - {track.album}</div>
-          </div>
-        </div>
+    <div className="footer2" style={{}}>
+      <div className="player-back-button"><span className="material-icons" onClick={() => navigate(-1)}>arrow_back</span></div>
+      <div></div>
+      <img className="" style={{ width: "auto", height: "66vh" }} src={protocolFilter( track ? track.image : defaultpng )}></img>
+      <div className="">
+        <div className=""><strong>{track ? (track.title ? track.title : track.path) : "< no track queued yet >"}</strong></div>
+        <div className="">{track ? track.artist : "< artist >"} - {track ? track.album : "< album >"}</div>
       </div>
       <div className="footer-center" style={{height:"60px", whiteSpace: "nowrap", verticalAlign: "middle", textAlign: "center", "overflow": "auto"}}>
         <div className="footer-flexcell">
@@ -406,100 +530,60 @@ const MediaFooter = (props:any) => {
             <div onClick={() => player.track_next()} className="material-icons">skip_next</div><div onClick={() => player.track_stop()} className="material-icons">close</div>
         </div>
       </div>
-      <div className="footer-right" style={{ minWidth: 0, height: "60px" }}>
-        <div className="footer-flexcell">
-          <div className="text-center w-100">{player.currentTime} <img onClick={() => player.toggleMode()} className="svg-filter-white" src={`/assets/${player.modes_repeaticon[mode]}.svg`}></img></div>
-          <div onClick={() => setFullScreenPlayer(!fullscreen_player)}>v</div>
-        </div>
-      </div>
+      <div className="text-center w-100">{progresstime} <img onClick={() => player.toggleMode()} className="svg-filter-white" src={protocolFilter( `res://assets/${player.modes_repeaticon[mode]}.svg` )}></img></div>
+      <div id="progress-bar" className="progress-bar" onMouseMove={(e) => player.progressMove(e)} onMouseDown={ (e)=> player.progressStart(e)} onMouseUp={ (e) => player.progressEnd(e) }><div id="progress-amt" className="progress-amt" style={{ 'width': progressamt }}>&nbsp;</div></div>
     </div>
-    <div id="progress-bar" className="progress-bar" onMouseMove={(e) => player.progressMove(e)} onMouseDown={ (e)=> player.progressStart(e)} onMouseUp={ (e) => player.progressEnd(e) }><div id="progress-amt" className="progress-amt" style={{ 'width': progressamt }}>&nbsp;</div></div>
   </span>
-  return fullscreen_player ? full_mode : foot_mode
+  return full_mode
 }
 
-const Header = (props) => {
-  let navigate = useNavigate();
-  const folderimage = props.folderimage
-  const root = props.root
-  const path = props.path
-  const setView = props.view
-  return <span>
-    <img className="albumart" src={protocolFilter( folderimage )}></img><span className="button material-icons" onClick={ () => { setView(`browse`); navigate(-1) } }>arrow_back</span><span className="button material-icons" onClick={ () => { setView(`browse`); navigate(1) } }>arrow_forward</span><span className="button material-icons" onClick={ () => { setView(`browse`); navigate(root) } }>home</span><span className="button material-icons" onClick={ () => { setView(`browse`) } }>folder</span><span className="button material-icons" onClick={ () => { setView(`queue`) } }>queue</span>
-  </span>
-}
-
-const Loading = () => {
-  return <div className="fade-in" style={{ position: "fixed", left: "0px", top: "0px", width: "100%", height: "100vh" , display: "flex", justifyContent: "center", alignItems: "center" }}>... loading ...</div>
-}
-
-const MediaBrowser =  (props:any) => {
+const MediaQueue =  (props:any) => {
   let navigate = useNavigate();
   let location = useLocation();
   // let params = useParams();  // for parsing id and id2 from the router "/browse/:id/:id2/", etc...
-  let path:any = location.pathname //.replace( /^\/browse/, "" ); path = path == "" ? "/" : path;
-
-  // the heavy hand
-  let [__rerender, __setRerender] = useState(0);      function render() { __setRerender(__rerender+1); }
+  let path:any = location.pathname.replace( /^\/queue/, "" ); path = path == "" ? "/" : path;
 
   // player state:
   let [listing, setListing] = useState( [] );
   let [progressamt, setProgressAmt] = useState(player.progressamt);
+  let [progresstime, setProgressTime] = useState(player.currentTime);
   let [track, setTrack] = useState(player.playing.track);
   let [mode, setMode] = useState(player.mode);
   let [player_state, setPlayerTransport] = useState("paused");
   let [folderimage, setFolderImage] = useState(icon);
   let [loading, setLoading] = useState(false);
-  let [view, setView] = useState("browse");
 
+  // only called on mount/unmount
   useEffect(() => {
-    loadBrowserLocalStorage().then( () => {
-      console.log( "load: lastURL", localStorage.getItem( "lastURL" ) )
-      if (localStorage.getItem( "lastURL" )) {
-        path = localStorage.getItem( "lastURL" );
-        console.log( "RESTORING URL", path )
-        navigate( path );
-      }
-      player.onNavigate = (url) => { navigate( `${url}` ); }
-      player.onProgressChange = (p) => { setProgressAmt( p ) };
+    console.log('[MediaQueue] init......');
+    init( navigate, location ).then( () => {
+      player.onNavigate = (url) => { console.log( "[MediaBrowser] onNavigate", `${url}` ); navigate( `${url}` ); }
+      player.onProgressChange = (amt, time) => { setProgressAmt( amt ); setProgressTime( time ); };
       player.onTrackChange = (t, i, l) => { setTrack( t ) };
       player.onPlayerTransportChange = (state) => { setPlayerTransport(state) };   /* init */ setPlayerTransport( player.isPlaying() ? "playing" : "paused" )
       player.onModeChange = (mode) => { setMode( mode ) };
+      player.resendState();
       window.addEventListener("keydown", (e) => player.onKeyDown( e ) );
-      console.log('mounted');
+      console.log('[MediaQueue] MOUNT');
+      console.log('====================MOUNT======================');
     })
     return () => {
       window.removeEventListener("keydown", (e) => player.onKeyDown( e ) );
-      console.log('====================UNMOUNT======================');
-      player.release();
+      console.log('[MediaQueue] UNMOUNT');
       saveBrowserLocalStorage();
     }
-  }, [])  // <-- add this empty array here,    [] -> only called on mount/unmount (once ever)
+  }, [])  // [] -> only called on mount/unmount (once ever)
 
+  // called every time
   useEffect( () => {
-      async function doAsyncStuff() {
-        setLoading( true );
-
-        // pull a new browser listing
-        console.log( `[browse] URL: ${location.pathname}${location.search}` );
-        console.log( `[browse] dir( "${path}" )` );
-        localStorage.setItem( "lastURL", path );
-        // console.log( "save: lastURL", localStorage.getItem( "lastURL" ) )
-        let l = await window.electron.invoke( "mediafs", "dir", path, undefined, false );
-        let curdir = l.filter( r => r.path == "." );
-        l = l.filter( r => r.path != "." && r.path != ".." && !r.path.match( /^\./ ) );
-        setListing( l );
-        setFolderImage( curdir.length > 0 && curdir[0].image ? curdir[0].image.match( /default/ ) ? icon : curdir[0].image : icon )
-        //console.log( JSON.stringify( l, null, 1 ) );
-
-        setLoading( false );
-        await saveBrowserLocalStorage(); // periodically commit any changes to disk...
-      }
-      doAsyncStuff();
+      init( navigate, location ).then( async () => {
+        // do nothing
+      });
       return () => { /*cleanup*/}
     },
-    [location.pathname], // [args, ...] rerun when any of these change.   [] -> only on mount/unmount (once ever)
+    [location.pathname], // [args, ...] rerun when any of these change.
   );
+
   // useLayoutEffect( () => {
   //     return () => {/*cleanup*/}
   //   },
@@ -507,25 +591,107 @@ const MediaBrowser =  (props:any) => {
   // );
 
 
+  let dom = (
+    <div className="listing" onMouseUp={() => { player.progress_manipulating = false }} >
+    <Header path={path} root="" folderimage={folderimage}></Header>
+    <span>
+    <div onClick={() => navigate(`/queue${path}`)}>queue:{path}</div>
+    <MediaList path={path} listing={player.playing.listing} player_state={player_state} track={track} click_play={ (...args:any) => { player.click( ...args, "/queue", "/player" ); } }></MediaList>
+    </span>
+    {track && <MediaFooter track={track} player_state={player_state} mode={mode} progressamt={progressamt} progreestime={progresstime}></MediaFooter>}
+    </div>
+  );
+
+  return dom;
+};
+
+const MediaBrowser =  (props:any) => {
+  let navigate = useNavigate();
+  let location = useLocation();
+  // let params = useParams();  // for parsing id and id2 from the router "/browse/:id/:id2/", etc...
+  let path:any = location.pathname.replace( /^\/browse/, "" );  path = (path == "" ? "/" : path);
+  last_browse_path = path;
+
+  // the heavy hand
+  let [__rerender, __setRerender] = useState(0);      function render() { __setRerender(__rerender+1); }
+
+  // player state:
+  let [listing, setListing] = useState( [] );
+  let [progressamt, setProgressAmt] = useState(player.progressamt);
+  let [progresstime, setProgressTime] = useState(player.currentTime);
+  let [track, setTrack] = useState(player.playing.track);
+  let [mode, setMode] = useState(player.mode);
+  let [player_state, setPlayerTransport] = useState("paused");
+  let [folderimage, setFolderImage] = useState(icon);
+  let [loading, setLoading] = useState(false);
+
+  // only called on mount/unmount
+  useEffect(() => {
+    init( navigate, location ).then( () => {
+      console.log('[MediaBrowser] init......');
+      player.onNavigate = (url) => { console.log( "[MediaBrowser] onNavigate", `${url}` ); navigate( `${url}` ); }
+      player.onProgressChange = (amt, time) => { setProgressAmt( amt ); setProgressTime( time ); };
+      player.onTrackChange = (t, i, l) => { console.log( "[MediaBrowser] setTrack" ); setTrack( t ) };
+      player.onPlayerTransportChange = (state) => { console.log( "[MediaBrowser] setTrack", state ); setPlayerTransport(state); };
+      player.onModeChange = (mode) => { console.log( "[MediaBrowser] setMode", mode ); setMode( mode ) };
+      player.resendState();
+      window.addEventListener("keydown", (e) => player.onKeyDown( e ) );
+      console.log('[MediaBrowser] MOUNT');
+    })
+    return () => {
+      window.removeEventListener("keydown", (e) => player.onKeyDown( e ) );
+      console.log('[MediaBrowser] UNMOUNT');
+      saveBrowserLocalStorage();
+    }
+  }, [])  // [] -> only called on mount/unmount (once ever)
+
+  // called every time
+  useEffect( () => {
+      async function doAsyncStuff() {
+        dataFetch_Lock.runExclusive( async () => {
+          setLoading( true );
+
+          // pull a new browse listing
+          console.log( `[MediaBrowser] URL: ${path}${location.search}` );
+          console.log( `[MediaBrowser] dir( "${path}" )` );
+          // console.log( "save: lastURL", localStorage.getItem( "lastURL" ) )
+          let l = await window.electron.invoke( "mediafs", "dir", path, undefined, false );
+          let curdir = l.filter( r => r.path == "." );
+          l = l.filter( r => r.path != "." && r.path != ".." && !r.path.match( /^\./ ) );
+          setListing( l );
+          setFolderImage( curdir.length > 0 && curdir[0].image ? curdir[0].image.match( /default/ ) ? icon : curdir[0].image : icon )
+          //console.log( JSON.stringify( l, null, 1 ) );
+
+          setLoading( false );
+          await saveBrowserLocalStorage(); // periodically commit any changes to disk...
+        })
+      }
+      init( navigate, location ).then( async () => await doAsyncStuff() );
+      return () => { /*cleanup*/}
+    },
+    [location.pathname], // [args, ...] rerun when any of these change
+  );
+
+  // useLayoutEffect( () => {
+  //     return () => {/*cleanup*/}
+  //   },
+  //   [mode, audio, playing, playing.track, progressamt, currentTime, playing.listing, playing.i], // [args, ...] rerun when any of these change.   [] -> only on mount/unmount (once ever)
+  // );
+
+  //given ["1", "2", "3, "4], returns ["1", "1/2", "1/2/3", "1/2/3/4" ]
+  const cumulativePathConcat = (sum => value => sum += "/" + value)("");
+
   let dom2 = (
     <div className="listing" onMouseUp={() => { player.progress_manipulating = false }} >
-
-    <Header path={path} root="" folderimage={folderimage} view={setView}></Header>
-    {loading && <Loading></Loading>}
-    {view == "browse" && !loading &&
-      <span>
-        <div onClick={() => navigate(path)}>media:{path}</div>
-        <MediaList path={path} listing={listing} player_state={player_state} track={track} click_play={ (...args:any) => { player.click( ...args )} }></MediaList>
-      </span>
-    }
-    {view == "queue" && !loading &&
-      <span>
-        <div>[NOW PLAYING]</div>
-        <MediaList path={path} listing={player.playing.listing} player_state={player_state} track={track} click_play={ (...args:any) => { player.click( ...args )} }></MediaList>
-      </span>
-    }
-
-    {track && <MediaFooter track={track} player_state={player_state} mode={mode} progressamt={progressamt}></MediaFooter>}
+      <Header path={path} root="" folderimage={folderimage}></Header>
+      {loading && <Loading></Loading>}
+      {!loading &&
+        <span>
+          <div><span onClick={() => navigate(`/browse/`)}>media:/</span>{path.split("/").filter( r => r != "" ).map( cumulativePathConcat ).map( r => <span onClick={() => navigate(`/browse${r}`)}>{`${r.replace(/^.*\//,"")}/`}</span> )}</div>
+          <MediaList path={path} listing={listing} player_state={player_state} track={track} click_play={ (...args:any) => { player.click( ...args, "/browse", "/player" ); } }></MediaList>
+        </span>
+      }
+      {track && <MediaFooter track={track} player_state={player_state} mode={mode} progressamt={progressamt} progresstime={progresstime}></MediaFooter>}
     </div>
   );
 
@@ -536,9 +702,10 @@ export default function App() {
   return (
     <Router>
       <Routes>
-        {/* <Route path="/queue/*" element={<MediaQueue />}></Route> */}
-        <Route path="*" element={<MediaBrowser />}></Route>
-        {/* <Route path="*" element={ <Navigate to="/browse" /> }></Route> */}
+        <Route path="/queue" element={<MediaQueue />}></Route>
+        <Route path="/player" element={<MediaPlayer />}></Route>
+        <Route path="/browse/*" element={<MediaBrowser />}></Route>
+        <Route path="*" element={ <Navigate to="/browse" /> }></Route>
       </Routes>
     </Router>
   );

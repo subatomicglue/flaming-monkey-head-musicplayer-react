@@ -385,10 +385,51 @@ H1 {
   width: 120px;
 }
 
-// Small devices (landscape phones, 576px and up)
+.footer2 {
+  position: fixed;
+  z-index: 1;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: #222222;
+  text-align: center;
+}
+.img-container {
+  width: 150px;
+  height: 150px;
+  border: 2px solid red;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+
+}
+.img-container .img-to-fit {
+  flex: 1;
+  height: 100%;
+}
+.player-back-button {
+  position: fixed;
+  padding: 2rem;
+  text-align: left;
+}
+
+
+/* Small devices (landscape phones, 576px and up) */
 @media (min-width: 576px) {
   .footer {
     height: 60px;
+  }
+  .footer2 {
+    position: fixed;
+    z-index: 1;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: #222222;
+    text-align: center;
   }
   .footer-center {
     display: inline-block;
@@ -418,7 +459,7 @@ H1 {
 }
 
 
-// https://stackoverflow.com/questions/22252472/how-to-change-the-color-of-an-svg-element
+/* https://stackoverflow.com/questions/22252472/how-to-change-the-color-of-an-svg-element */
 .svg-filter-white {
   filter: invert(100%) sepia(1%) saturate(7484%) hue-rotate(161deg) brightness(103%) contrast(99%);
 }

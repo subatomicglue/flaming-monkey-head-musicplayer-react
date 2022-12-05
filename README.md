@@ -35,20 +35,27 @@ Standalone app written in React (18) and NodeJS (14), packaged into an Electron 
     - **Auto Click Removal:** Fade to Silence 0.1s from end of track to avoid pop.
 
 ## Future Work:
-  - IMMEDIATE TODO:
-    - bigger play controls for large fingers :)
-    - filter out any . files from the file listing
-    - config file for the ROOTs (what you see when you navigate all the way .. up
-    - remove titlebar and menu
-    - power button in upper right to exit
-    - store settings so they're persistant... (e.g. repeat mode)
-      - location configurable (if using RO filesystem, can use USB stick instead)
-    - tapping the playing title resets back to that folder...
-  - Better hero image / banner w/title+description at top.
-  - Folder Icons derived from embedded tagged art when no images in folder
+  - amazon music has 2 times, left (time elapsed) and right (-time left), hovering above the progress meter, on mouse over
+  - add a copy button to the end of the media:// url
+  - playlist system
+    - In Browser:   [+] shows on mouse over, adds to queue
+    - In Queue:
+      - Heading:   [folder/playlist], playlistname, play, shuffle, ... (rename, delete)
+      - Per item:  #, image, title, artist, album name, time, X, ... (add to list, remove, view folder, download)
+    - In Browser/Root folder:
+      - "Playlists" heading with all playlists
+      - mouseover (play icon)
+      - when play is clicked (replace queue and play)
+      - when icon is clicked (go to the queue)
+  - recents system:
+    - In Browser/Root folder:
+      - "Recently Played" heading with what was recently played (only: folder & playlist)
+      - mouseover (x, play icon, ...)
+      - when play is clicked (replace queue and play)
+      - when icon is clicked (go to the folder or queue)
+  - power button in upper right to exit
   - build for the raspberry pi, convert / clean out the old scripts from the project I copied this from...
   - make a release in github (upload app bundles)
-  - think about DLNA / uPnP browsing
 
 
 # Development (Troubleshooting Notes)

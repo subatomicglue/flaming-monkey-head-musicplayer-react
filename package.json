@@ -52,7 +52,7 @@
     "start:main": "cross-env NODE_ENV=development electronmon -r ts-node/register/transpile-only .",
     "start:preload": "cross-env NODE_ENV=development TS_NODE_TRANSPILE_ONLY=true webpack --config ./.erb/configs/webpack.config.preload.dev.ts",
     "start:renderer": "cross-env NODE_ENV=development TS_NODE_TRANSPILE_ONLY=true webpack serve --config ./.erb/configs/webpack.config.renderer.dev.ts",
-    "deploy": "echo '--- Installing into MacOS Applications/ ---' && rm -rf ~/Applications/FlamingMonkeyHeadMusicPlayer2.app;  cp -r release/build/mac/FlamingMonkeyHeadMusicPlayer.app ~/Applications/FlamingMonkeyHeadMusicPlayer2.app; open ~/Applications/FlamingMonkeyHeadMusicPlayer2.app",
+    "deploy": "echo '--- Installing into MacOS Applications/ ---' && rm -rf /Applications/FlamingMonkeyHeadMusicPlayer.app;  cp -r release/build/mac/FlamingMonkeyHeadMusicPlayer.app /Applications/FlamingMonkeyHeadMusicPlayer.app; open /Applications/FlamingMonkeyHeadMusicPlayer.app",
     "deploy-rpi": "echo '--- Sending project over to the pi ---' && rsync -av -e ssh --exclude='.github/*' --exclude='.git/*' --exclude='node_modules/*' --exclude='app/node_modules/*' --exclude='.vscode/*'  --exclude='dist/*'  --exclude='release/*'  $(pwd)/ pi@raspberrypi.local:/home/pi/FlamingMonkeyHeadMusicPlayer; echo 'ok, now run:'; echo '  ssh pi@raspberrypi.local'; echo '  cd /home/pi/FlamingMonkeyHeadMusicPlayer'; echo '  npm install'; echo '  npm run electron:buildrpi'; echo '  DISPLAY=:0.0 release/linux-armv7l-unpacked/FlamingMonkeyHeadMusicPlayer' echo ''; echo 'Back on the host (pull the new package back):'; echo '  rsync -av -e ssh pi@raspberrypi.local:/home/pi/FlamingMonkeyHeadMusicPlayer/release/*.deb ./release/'",
     "deploy-rpi:buildrpi": "npm run deploy-rpi; ssh pi@raspberrypi.local 'cd /home/pi/FlamingMonkeyHeadMusicPlayer && npm install && echo '--- This will take 10-20 min ---' && npm run package-rpi'; mkdir -p release && echo '--- Downloading the built package ---' && rsync -av -e ssh pi@raspberrypi.local:/home/pi/FlamingMonkeyHeadMusicPlayer/release/*.deb ./release/",
     "test": "jest",
@@ -119,6 +119,7 @@
   },
   "dependencies": {
     "@popperjs/core": "^2.11.6",
+    "async-mutex": "^0.4.0",
     "bootstrap": "^5.2.1",
     "detect-rpi": "^1.4.0",
     "electron-debug": "^3.2.0",
