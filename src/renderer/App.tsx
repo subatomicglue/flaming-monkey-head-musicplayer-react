@@ -1,6 +1,6 @@
 
-import { contextBridge, ipcRenderer, IpcRendererEvent, MouseInputEvent } from 'electron';
-import { MouseEventHandler, SyntheticEvent, useEffect, useLayoutEffect, useMutationEffect, useState } from "react";
+import { contextBridge, /*ipcRenderer, IpcRendererEvent,*/ MouseInputEvent, clipboard } from 'electron';
+import { MouseEventHandler, SyntheticEvent, useCallback, useEffect, useLayoutEffect, useMutationEffect, useState } from "react";
 import { Link, NavLink, Outlet, MemoryRouter as Router, Routes, Route, useSearchParams, useParams,
   useNavigate,
   useLocation, Navigate, createSearchParams } from 'react-router-dom'; // https://github.com/remix-run/react-router/blob/main/docs/getting-started/tutorial.md
@@ -17,6 +17,8 @@ const xhrAuth = require('xhrjs/xhr').init( XMLHttpRequest ).xhrAuth;
 let localStorage_Lock = new Mutex();
 let dataFetch_Lock = new Mutex();
 let last_browse_path = "/";
+
+//let cb = clipboard;
 
 let init_local_storage = false;
 async function saveBrowserLocalStorage() {
@@ -126,15 +128,19 @@ class Player {
   }
 
   onKeyDown( e:KeyboardEvent ) {
+    if (e.repeat) {
+      return;
+    }
     console.log( e.code )
-    if (e.code=="Space" && !e.repeat) {
+    if (e.code=="Space") {
+      console.log( `Toggle play/pause (playing: ${this.isPlaying()}` )
       this.isPlaying() ? this.track_pause() : this.track_play()
+      e.preventDefault();
     }
-    if (e.code=="KeyE" && !e.repeat) {
-
-      this.track_play() //
+    if (e.code=="Escape") {
+      window.electron.invoke( "quit" );
+      e.preventDefault();
     }
-    e.preventDefault();
   }
   isPlaying() { return this.audio && !this.audio.paused; }
 
@@ -355,7 +361,16 @@ class Player {
   }
 }
 
-let player = window.player ? window.player : window.player = new Player(); // persist the player after HMR (hot reload)
+// persist the "player" after HMR (hot reload).
+// player's code will NOT get HMR'd!!!
+// because:
+// - we do not recreate it here
+// - it stays allocated in the DOM window
+// - which preserves what's playing
+// going to need something like:
+// - (() => { delete window.player; window.player = new Player(); return window.player })()
+// - BUT... it'll need to teardown
+let player = window.player ? window.player : window.player = new Player();
 
 const MediaList =  (props:any) => {
   //let params = useParams();
@@ -475,6 +490,7 @@ const MediaPlayer = (props:any) => {
   //let params = useParams();
   let navigate = useNavigate();
   let location = useLocation();
+  const onKeyDown = useCallback( (e) => player.onKeyDown( e ), [] )
 
   // player state:
   let [progressamt, setProgressAmt] = useState(player.progressamt);
@@ -493,11 +509,11 @@ const MediaPlayer = (props:any) => {
       player.onPlayerTransportChange = (state) => { setPlayerTransport(state) };
       player.onModeChange = (mode) => { setMode( mode ) };
       player.resendState();
-      window.addEventListener("keydown", (e) => player.onKeyDown( e ) );
+      window.addEventListener("keydown", onKeyDown );
       console.log('[MediaPlayer] MOUNT');
     })
     return () => {
-      window.removeEventListener("keydown", (e) => player.onKeyDown( e ) );
+      window.removeEventListener("keydown", onKeyDown );
       console.log('[MediaPlayer] UNMOUNT');
       saveBrowserLocalStorage();
     }
@@ -542,6 +558,7 @@ const MediaQueue =  (props:any) => {
   let location = useLocation();
   // let params = useParams();  // for parsing id and id2 from the router "/browse/:id/:id2/", etc...
   let path:any = location.pathname.replace( /^\/queue/, "" ); path = path == "" ? "/" : path;
+  const onKeyDown = useCallback( (e) => player.onKeyDown( e ), [] )
 
   // player state:
   let [listing, setListing] = useState( [] );
@@ -563,12 +580,12 @@ const MediaQueue =  (props:any) => {
       player.onPlayerTransportChange = (state) => { setPlayerTransport(state) };   /* init */ setPlayerTransport( player.isPlaying() ? "playing" : "paused" )
       player.onModeChange = (mode) => { setMode( mode ) };
       player.resendState();
-      window.addEventListener("keydown", (e) => player.onKeyDown( e ) );
+      window.addEventListener("keydown", onKeyDown );
       console.log('[MediaQueue] MOUNT');
       console.log('====================MOUNT======================');
     })
     return () => {
-      window.removeEventListener("keydown", (e) => player.onKeyDown( e ) );
+      window.removeEventListener("keydown", onKeyDown );
       console.log('[MediaQueue] UNMOUNT');
       saveBrowserLocalStorage();
     }
@@ -611,9 +628,10 @@ const MediaBrowser =  (props:any) => {
   // let params = useParams();  // for parsing id and id2 from the router "/browse/:id/:id2/", etc...
   let path:any = location.pathname.replace( /^\/browse/, "" );  path = (path == "" ? "/" : path);
   last_browse_path = path;
+  const onKeyDown = useCallback( (e) => player.onKeyDown( e ), [] )
 
   // the heavy hand
-  let [__rerender, __setRerender] = useState(0);      function render() { __setRerender(__rerender+1); }
+  //let [__rerender, __setRerender] = useState(0);      function render() { __setRerender(__rerender+1); }
 
   // player state:
   let [listing, setListing] = useState( [] );
@@ -635,11 +653,11 @@ const MediaBrowser =  (props:any) => {
       player.onPlayerTransportChange = (state) => { console.log( "[MediaBrowser] setTrack", state ); setPlayerTransport(state); };
       player.onModeChange = (mode) => { console.log( "[MediaBrowser] setMode", mode ); setMode( mode ) };
       player.resendState();
-      window.addEventListener("keydown", (e) => player.onKeyDown( e ) );
+      window.addEventListener("keydown", onKeyDown );
       console.log('[MediaBrowser] MOUNT');
     })
     return () => {
-      window.removeEventListener("keydown", (e) => player.onKeyDown( e ) );
+      window.removeEventListener("keydown", onKeyDown );
       console.log('[MediaBrowser] UNMOUNT');
       saveBrowserLocalStorage();
     }
@@ -687,7 +705,7 @@ const MediaBrowser =  (props:any) => {
       {loading && <Loading></Loading>}
       {!loading &&
         <span>
-          <div><span onClick={() => navigate(`/browse/`)}>media:/</span>{path.split("/").filter( r => r != "" ).map( cumulativePathConcat ).map( r => <span onClick={() => navigate(`/browse${r}`)}>{`${r.replace(/^.*\//,"")}/`}</span> )}</div>
+          <div><span onClick={() => navigate(`/browse/`)}>media:/</span>{path.split("/").filter( r => r != "" ).map( cumulativePathConcat ).map( r => <span onClick={() => navigate(`/browse${r}`)}>{`${r.replace(/^.*\//,"")}/`}</span> )}</div><button >[c]</button>
           <MediaList path={path} listing={listing} player_state={player_state} track={track} click_play={ (...args:any) => { player.click( ...args, "/browse", "/player" ); } }></MediaList>
         </span>
       }

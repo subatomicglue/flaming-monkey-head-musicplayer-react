@@ -22,6 +22,8 @@ import * as url from 'url';
 import isPi from 'detect-rpi'; // detect raspberry pi
 import mediafs from 'media-fsjs/media-fs';
 console.log( "[main] init media fs")
+const { clipboard } = require('electron')
+
 
 
 // debug what it's like running from a different dir.
@@ -229,6 +231,11 @@ ipcMain.handle('readFileSync', async (event, fileURL, mimeType="base64") => {
   return result;
 })
 
+ipcMain.handle('quit',  async (event, ...args) => {
+  console.log( `[main.ts] handle quit()` )
+  app.quit();
+})
+
 
 if (process.env.NODE_ENV === 'production') {
   const sourceMapSupport = require('source-map-support');
@@ -299,7 +306,10 @@ const createWindow = async () => {
       //webSecurity: false,                 // THIS SEEMS TO ALSO ENABLE InsecureContent....  xxxxxx maybe not safe in this case: //////it is SAFE to disable when we interceptFileProtocol('file') and handle all file:// access ourselves. (otherwise we write our own handler for res:// where we STILL have to gaurentee security for the filesystem, meh, webSecurity:true is default for when we dont have interceptFileProtocol('file'))
       //allowRunningInsecureContent: false,  // true - allows running .js downloaded from external addresses (not secure, we dont want this)
       sandbox: false,
-      preload: app.isPackaged
+
+      //nodeIntegration: true,      // KEVIN: https://github.com/electron-react-boilerplate/electron-react-boilerplate/issues/2949
+      //contextIsolation: true,    // KEVIN: https://github.com/electron-react-boilerplate/electron-react-boilerplate/issues/2949
+      preload: app.isPackaged  // KEVIN: https://github.com/electron-react-boilerplate/electron-react-boilerplate/issues/2949
         ? path.join(__dirname, 'preload.js')
         : path.join(__dirname, '../../.erb/dll/preload.js'),
 
