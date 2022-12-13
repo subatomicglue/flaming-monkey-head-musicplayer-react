@@ -22,7 +22,6 @@ import * as url from 'url';
 import isPi from 'detect-rpi'; // detect raspberry pi
 import mediafs from 'media-fsjs/media-fs';
 console.log( "[main] init media fs")
-const { clipboard } = require('electron')
 
 
 
@@ -307,7 +306,7 @@ const createWindow = async () => {
       //allowRunningInsecureContent: false,  // true - allows running .js downloaded from external addresses (not secure, we dont want this)
       sandbox: false,
 
-      //nodeIntegration: true,      // KEVIN: https://github.com/electron-react-boilerplate/electron-react-boilerplate/issues/2949
+      nodeIntegration: true,      // KEVIN: https://github.com/electron-react-boilerplate/electron-react-boilerplate/issues/2949
       //contextIsolation: true,    // KEVIN: https://github.com/electron-react-boilerplate/electron-react-boilerplate/issues/2949
       preload: app.isPackaged  // KEVIN: https://github.com/electron-react-boilerplate/electron-react-boilerplate/issues/2949
         ? path.join(__dirname, 'preload.js')

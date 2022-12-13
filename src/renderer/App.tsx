@@ -18,7 +18,7 @@ let localStorage_Lock = new Mutex();
 let dataFetch_Lock = new Mutex();
 let last_browse_path = "/";
 
-//let cb = clipboard;
+//let cb = clipboard;  //  PROBLEM
 
 let init_local_storage = false;
 async function saveBrowserLocalStorage() {
