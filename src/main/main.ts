@@ -22,6 +22,7 @@ import * as url from 'url';
 import isPi from 'detect-rpi'; // detect raspberry pi
 import mediafs from 'media-fsjs/media-fs';
 console.log( "[main] init media fs")
+import { clipboard } from 'electron';
 
 
 
@@ -29,7 +30,7 @@ console.log( "[main] init media fs")
 process.chdir('/Users/kevinmeinert/src/flaming-monkey-head-musicplayer-react/dummydir');
 
 const env = process.env.NODE_ENV || 'development';
-let VERBOSE = false;//env != 'development' ? false : true;
+let VERBOSE = true;//env != 'development' ? false : true;
 console.log( `\n` );
 console.log( `[main.ts] -----------------------------------------` );
 console.log( `[main.ts] environment = ${env}, VERBOSE=${VERBOSE}` )
@@ -175,6 +176,28 @@ ipcMain.handle('settings', async (event, FUNC, ...values) => {
   return result;
 })
 
+ipcMain.handle('readFileSync', async (event, fileURL, mimeType="base64") => {
+  console.log( `[main.ts] readFileSync( "${fileURL}" )` )
+  let result = convertFileToImageEmbed( fileURL );
+  //let base64 = "data:audio/m4a;base64," + result.toString('base64');
+  console.log( `       <= ${result.length} bytes` )
+  //console.log( result.slice( 0, 100 ) );
+  return result;
+})
+
+ipcMain.handle('quit',  async (event, ...args) => {
+  console.log( `[main.ts] handle quit()` )
+  app.quit();
+})
+
+ipcMain.handle('clipboard', async (event, FUNC, ...values) => {
+  let name='clipboard'
+  let lib = clipboard;
+  let result = lib.hasOwnProperty( FUNC ) ? await lib[FUNC](...values) : `ERROR: no such function as ${name}.${FUNC}(...)`;
+  consoleLogIPC( "main.ts", name, FUNC, values, result )
+  return result;
+})
+
 ipcMain.handle('loadBrowserLocalStorage', async (event) => await loadBrowserLocalStorage() )
 ipcMain.handle('saveBrowserLocalStorage', async (event) => await saveBrowserLocalStorage() )
 
@@ -220,20 +243,6 @@ function convertFileToImageEmbed( fileURL ) {
   }
   return result;
 }
-
-ipcMain.handle('readFileSync', async (event, fileURL, mimeType="base64") => {
-  console.log( `[main.ts] readFileSync( "${fileURL}" )` )
-  let result = convertFileToImageEmbed( fileURL );
-  //let base64 = "data:audio/m4a;base64," + result.toString('base64');
-  console.log( `       <= ${result.length} bytes` )
-  //console.log( result.slice( 0, 100 ) );
-  return result;
-})
-
-ipcMain.handle('quit',  async (event, ...args) => {
-  console.log( `[main.ts] handle quit()` )
-  app.quit();
-})
 
 
 if (process.env.NODE_ENV === 'production') {

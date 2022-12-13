@@ -1,6 +1,6 @@
 
-import { contextBridge, /*ipcRenderer, IpcRendererEvent,*/ MouseInputEvent, clipboard } from 'electron';
-import { MouseEventHandler, SyntheticEvent, useCallback, useEffect, useLayoutEffect, useMutationEffect, useState } from "react";
+import { contextBridge, MouseInputEvent, clipboard } from 'electron';
+import { MouseEventHandler, SyntheticEvent, useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { Link, NavLink, Outlet, MemoryRouter as Router, Routes, Route, useSearchParams, useParams,
   useNavigate,
   useLocation, Navigate, createSearchParams } from 'react-router-dom'; // https://github.com/remix-run/react-router/blob/main/docs/getting-started/tutorial.md
@@ -17,8 +17,6 @@ const xhrAuth = require('xhrjs/xhr').init( XMLHttpRequest ).xhrAuth;
 let localStorage_Lock = new Mutex();
 let dataFetch_Lock = new Mutex();
 let last_browse_path = "/";
-
-//let cb = clipboard;  //  PROBLEM
 
 let init_local_storage = false;
 async function saveBrowserLocalStorage() {
@@ -705,7 +703,7 @@ const MediaBrowser =  (props:any) => {
       {loading && <Loading></Loading>}
       {!loading &&
         <span>
-          <div><span onClick={() => navigate(`/browse/`)}>media:/</span>{path.split("/").filter( r => r != "" ).map( cumulativePathConcat ).map( r => <span onClick={() => navigate(`/browse${r}`)}>{`${r.replace(/^.*\//,"")}/`}</span> )}</div><button >[c]</button>
+          <div><span onClick={() => navigate(`/browse/`)}>media:/</span>{path.split("/").filter( r => r != "" ).map( cumulativePathConcat ).map( r => <span onClick={() => navigate(`/browse${r}`)}>{`${r.replace(/^.*\//,"")}/`}</span> )}<span className="buttontiny material-icons" onClick={ () => {window.electron.invoke( "clipboard", "writeText", path )}}>content_copy</span></div>
           <MediaList path={path} listing={listing} player_state={player_state} track={track} click_play={ (...args:any) => { player.click( ...args, "/browse", "/player" ); } }></MediaList>
         </span>
       }
