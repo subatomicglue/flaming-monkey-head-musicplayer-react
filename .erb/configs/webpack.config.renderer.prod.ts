@@ -24,6 +24,8 @@ const configuration: webpack.Configuration = {
   mode: 'production',
 
   target: ['web', 'electron-renderer'],
+  //target: ['electron-renderer'],  // KEVIN: https://github.com/electron-react-boilerplate/electron-react-boilerplate/issues/2949
+
 
   entry: [path.join(webpackPaths.srcRendererPath, 'index.tsx')],
 
@@ -31,6 +33,7 @@ const configuration: webpack.Configuration = {
     path: webpackPaths.distRendererPath,
     publicPath: './',
     filename: 'renderer.js',
+    // KEVIN: https://github.com/electron-react-boilerplate/electron-react-boilerplate/issues/2949
     library: {
       type: 'umd',
     },

@@ -44,6 +44,7 @@ const configuration: webpack.Configuration = {
   mode: 'development',
 
   target: ['web', 'electron-renderer'],
+  //target: ['electron-renderer'],    // KEVIN https://github.com/electron-react-boilerplate/electron-react-boilerplate/issues/2949
 
   entry: [
     `webpack-dev-server/client?http://localhost:${port}/dist`,
@@ -55,6 +56,7 @@ const configuration: webpack.Configuration = {
     path: webpackPaths.distRendererPath,
     publicPath: '/',
     filename: 'renderer.dev.js',
+    // KEVIN: https://github.com/electron-react-boilerplate/electron-react-boilerplate/issues/2949
     library: {
       type: 'umd',
     },
