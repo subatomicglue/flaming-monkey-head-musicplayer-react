@@ -152,7 +152,7 @@ a, a:hover, a:visited {
   text-decoration: none;
 }
 
-.button, .buttontiny {
+.button, .button-tiny {
   display: inline-block;
   background-color: lightblue;
   color: black;
@@ -166,7 +166,7 @@ a, a:hover, a:visited {
   padding: 1em;
   margin: .2em;
 }
-.buttontiny {
+.button-tiny {
   padding: 0em;
   margin: .2em;
 }

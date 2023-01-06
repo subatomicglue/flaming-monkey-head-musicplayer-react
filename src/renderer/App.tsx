@@ -14,6 +14,7 @@ const xhr = require('xhrjs/xhr').init( XMLHttpRequest ).xhr;
 const xhrAuth = require('xhrjs/xhr').init( XMLHttpRequest ).xhrAuth;
 //import xhr from "xhrjs/xhr.js";
 
+let VERBOSE = false;
 let localStorage_Lock = new Mutex();
 let dataFetch_Lock = new Mutex();
 let last_browse_path = "/";
@@ -31,6 +32,54 @@ async function loadBrowserLocalStorage() {
     await window.electron.invoke( "loadBrowserLocalStorage" );
     init_local_storage = true;
   })
+}
+
+function encodeMediaPath( path ) {
+  return path.replace( /\?/g, "%3F" )
+}
+function decodeMediaPath( path ) {
+  return path.replace( /%3F/g, "?" )
+}
+
+// global keyboard handler.
+function onKeyDown_GlobalHandler( e:KeyboardEvent ) {
+  if (e.repeat) return;
+  console.log( "[onKeyDown]", e.code, "meta", e.metaKey, "alt", e.altKey, "ctrl", e.ctrlKey );
+  if (e.code=="Space") {
+    console.log( `Toggle play/pause (playing: ${player.isPlaying()}` )
+    player.isPlaying() ? player.track_pause() : player.track_play()
+    e.preventDefault();
+  }
+  if (e.code=="Escape") {// || (e.code=="KeyQ" && (e.metaKey || e.ctrlKey)) || (e.code=="KeyW" && (e.metaKey || e.ctrlKey)) ) {
+    window.electron.invoke( "app", "quit" );
+    e.preventDefault();
+  }
+  if (e.code=="ArrowRight") {
+    if (player.isPlaying()) {
+      player.audio.currentTime = Math.min( player.audio.currentTime + 10, player.audio.duration ); // 10 seconds
+      player.updateTrackTime();
+      e.preventDefault();
+    }
+  }
+  if (e.code=="ArrowLeft") {
+    if (player.isPlaying()) {
+      player.audio.currentTime = Math.min( player.audio.currentTime - 10, player.audio.duration ); // 10 seconds
+      player.updateTrackTime();
+      e.preventDefault();
+    }
+  }
+  if (e.code=="ArrowUp") {
+    if (player.isPlaying()) {
+      player.track_prev();
+      e.preventDefault();
+    }
+  }
+  if (e.code=="ArrowDown") {
+    if (player.isPlaying()) {
+      player.track_next();
+      e.preventDefault();
+    }
+  }
 }
 
 async function waitForValue( value_func, should_be, timeout_sec = 5 ) {
@@ -80,7 +129,9 @@ function deepClone( obj ) {
   return JSON.parse( JSON.stringify( obj ) );
 }
 
-
+//////////////////
+// AUDIO PLAYER
+//////////////////
 
 class Player {
   progress_manipulating:boolean = false;
@@ -125,21 +176,6 @@ class Player {
     this.onListingChange && this.onListingChange( this.playing.listing );
   }
 
-  onKeyDown( e:KeyboardEvent ) {
-    if (e.repeat) {
-      return;
-    }
-    console.log( e.code )
-    if (e.code=="Space") {
-      console.log( `Toggle play/pause (playing: ${this.isPlaying()}` )
-      this.isPlaying() ? this.track_pause() : this.track_play()
-      e.preventDefault();
-    }
-    if (e.code=="Escape") {
-      window.electron.invoke( "quit" );
-      e.preventDefault();
-    }
-  }
   isPlaying() { return this.audio && !this.audio.paused; }
 
   modes = [
@@ -365,11 +401,17 @@ class Player {
 // - we do not recreate it here
 // - it stays allocated in the DOM window
 // - which preserves what's playing
-// going to need something like:
+// TODO:  we can improve this by saving player state, delete, new, restore state.   going to need something like:
 // - (() => { delete window.player; window.player = new Player(); return window.player })()
 // - BUT... it'll need to teardown
 let player = window.player ? window.player : window.player = new Player();
 
+
+/////////////////////////
+// REACT COMPONENTS
+/////////////////////////
+
+// component:
 const MediaList =  (props:any) => {
   //let params = useParams();
   let path = props.path;
@@ -390,7 +432,7 @@ const MediaList =  (props:any) => {
 
         <div className="text">
           <div className={ `textline ${f.type != 'dir' ? 'textline-song' : ''}` }>
-            {(player_state == "playing" && track && track.abs_path == f.abs_path) ? <span className="material-icons-outlined" style={{verticalAlign: "middle", marginLeft: "-8px"}}>play_arrow</span> : ""}
+            {(player_state == "playing" && track && track.resource == f.resource) ? <span className="material-icons-outlined" style={{verticalAlign: "middle", marginLeft: "-8px"}}>play_arrow</span> : ""}
             {f.title ? f.title : f.path + (f.type == "dir" ? "/" : "") }
           </div>
           {(f.path != '..') &&
@@ -404,6 +446,7 @@ const MediaList =  (props:any) => {
   ))
 }
 
+// component
 const MediaFooter = (props:any) => {
   if (!props) return <div></div>
   //let params = useParams();
@@ -446,23 +489,30 @@ const MediaFooter = (props:any) => {
   return foot_mode
 }
 
+function convertUrlToMediaPath( url, root = "browse" ) {
+  console.log( url );
+  let path = decodeMediaPath( url ).replace( new RegExp( `^/${root}` ), "" );
+  path = path == "" ? "/" : path;
+  return path
+}
 
+// component
 const Header = (props) => {
   let navigate = useNavigate();
   const folderimage = props.folderimage
-  const root = props.root
-  const path = props.path
-  const setView = props.view
   return <span>
     <img className="albumart" src={protocolFilter( folderimage )}></img>
     <span className="button material-icons" onClick={ () => { navigate(-1) } }>arrow_back</span>
     <span className="button material-icons" onClick={ () => { navigate(1) } }>arrow_forward</span>
-    <span className="button material-icons" onClick={ () => { navigate( "/browse" + last_browse_path ) } }>folder</span>
-    <span className="button material-icons" onClick={ () => { navigate( "/queue" ) } }>playlist_add</span>
-    <span className="button material-icons" onClick={ () => { navigate( "/player" ) } }>ondemand_video</span>
+    <span className="button material-icons" onClick={ () => { window.location.reload(true) } }>refresh</span>
+    |
+    <span className="button material-icons" onClick={ () => { navigate( encodeMediaPath( "/browse" + last_browse_path ) ) } }>folder</span>
+    <span className="button material-icons" onClick={ () => { navigate( encodeMediaPath( "/queue" ) ) } }>playlist_add</span>
+    <span className="button material-icons" onClick={ () => { navigate( encodeMediaPath( "/player" ) ) } }>ondemand_video</span>
   </span>
 }
 
+// component:
 const Loading = () => {
   return <div className="fade-in" style={{ position: "fixed", left: "0px", top: "0px", width: "100%", height: "100vh" , display: "flex", justifyContent: "center", alignItems: "center" }}>... loading ...</div>
 }
@@ -473,22 +523,32 @@ async function init( navigate_func = (url:string) => {}, location ) {
     await loadBrowserLocalStorage();
     let url = localStorage.getItem( "lastURL" );
     if (url) {
-        console.log( "RESTORING URL", url )
+        console.log( `[init] RESTORING URL: "${url}"` )
         navigate_func( url );
     }
   } else {
-    console.log( "SAVE URL:", location.pathname )
+    console.log( `[init] SAVE URL: "${location.pathname}"` );
     localStorage.setItem( "lastURL", location.pathname );
   }
   init_once = false;
 }
 
+// page:
 const MediaPlayer = (props:any) => {
   if (!props) return <div></div>
   //let params = useParams();
   let navigate = useNavigate();
   let location = useLocation();
-  const onKeyDown = useCallback( (e) => player.onKeyDown( e ), [] )
+  const onKeyDown = useCallback( (e) => {
+    if (e.repeat) return;
+    // intercept escape to close the player and return to whence we came:
+    if (e.code=="Escape") {
+      navigate(-1);
+      e.preventDefault();
+      return;
+    }
+    onKeyDown_GlobalHandler( e )
+  }, [] )
 
   // player state:
   let [progressamt, setProgressAmt] = useState(player.progressamt);
@@ -501,7 +561,7 @@ const MediaPlayer = (props:any) => {
   useEffect(() => {
     console.log('[MediaPlayer] init......');
     init( navigate, location ).then( () => {
-      player.onNavigate = (url) => { console.log( "[MediaPlayer] onNavigate", `${url}` ); navigate( `${url}` ); }
+      player.onNavigate = (url) => { console.log( "[MediaPlayer] onNavigate", `${url}` ); navigate( encodeMediaPath( `${url}` ) ); }
       player.onProgressChange = (amt, time) => { setProgressAmt( amt ); setProgressTime( time ); };
       player.onTrackChange = (t, i, l) => { setTrack( t ) };
       player.onPlayerTransportChange = (state) => { setPlayerTransport(state) };
@@ -520,7 +580,8 @@ const MediaPlayer = (props:any) => {
   // called every time
   useEffect( () => {
       init( navigate, location ).then( async () => {
-        // do nothing
+        console.log( `[MediaPlayer] URL: "${location.pathname}${location.search}"` );
+        //console.log( `[MediaPlayer] dir( "${path}" )` );
       });
       return () => { /*cleanup*/}
     },
@@ -551,12 +612,13 @@ const MediaPlayer = (props:any) => {
   return full_mode
 }
 
+// page:
 const MediaQueue =  (props:any) => {
   let navigate = useNavigate();
   let location = useLocation();
   // let params = useParams();  // for parsing id and id2 from the router "/browse/:id/:id2/", etc...
-  let path:any = location.pathname.replace( /^\/queue/, "" ); path = path == "" ? "/" : path;
-  const onKeyDown = useCallback( (e) => player.onKeyDown( e ), [] )
+  let path = convertUrlToMediaPath( location.pathname, "queue" );
+  const onKeyDown = useCallback( (e) => onKeyDown_GlobalHandler( e ), [] )
 
   // player state:
   let [listing, setListing] = useState( [] );
@@ -572,7 +634,7 @@ const MediaQueue =  (props:any) => {
   useEffect(() => {
     console.log('[MediaQueue] init......');
     init( navigate, location ).then( () => {
-      player.onNavigate = (url) => { console.log( "[MediaBrowser] onNavigate", `${url}` ); navigate( `${url}` ); }
+      player.onNavigate = (url) => { console.log( "[MediaBrowser] onNavigate", `${url}` ); navigate( encodeMediaPath( `${url}` ) ); }
       player.onProgressChange = (amt, time) => { setProgressAmt( amt ); setProgressTime( time ); };
       player.onTrackChange = (t, i, l) => { setTrack( t ) };
       player.onPlayerTransportChange = (state) => { setPlayerTransport(state) };   /* init */ setPlayerTransport( player.isPlaying() ? "playing" : "paused" )
@@ -592,7 +654,8 @@ const MediaQueue =  (props:any) => {
   // called every time
   useEffect( () => {
       init( navigate, location ).then( async () => {
-        // do nothing
+        console.log( `[MediaQueue] URL: "${location.pathname}${location.search}"` );
+        console.log( `[MediaQueue] dir( "${path}" )` );
       });
       return () => { /*cleanup*/}
     },
@@ -620,13 +683,57 @@ const MediaQueue =  (props:any) => {
   return dom;
 };
 
+// component:
+const MediaPath =  (props:any) => {
+  let navigate = useNavigate();
+  let path = props.path;
+  let path_prefix = props.path_prefix;
+  let [clipboard, setClipboard] = useState( "" );
+
+  const onKeyDown = useCallback( ( e:KeyboardEvent ) => {
+    if (e.repeat) return;
+    if (e.code=="KeyV" && (e.metaKey || e.ctrlKey)) {
+      console.log( "Paste", clipboard );
+      if (clipboard != "") {
+        navigate(`/${path_prefix}${clipboard}`)
+      }
+      e.preventDefault();
+    }
+    if (e.code=="KeyC" && (e.metaKey || e.ctrlKey)) {
+      clipboard=path;
+      console.log( "Copy", clipboard );
+      e.preventDefault();
+    }
+  }, []);
+
+  // only called on mount/unmount
+  useEffect(() => {
+    window.addEventListener("keydown", onKeyDown );
+    console.log('[MediaPath] MOUNT');
+    return () => {
+      window.removeEventListener("keydown", onKeyDown );
+      console.log('[MediaPath] UNMOUNT');
+    }
+  }, [])  // [] -> only called on mount/unmount (once ever)
+
+  //given ["1", "2", "3, "4], returns ["1", "1/2", "1/2/3", "1/2/3/4" ]
+  const cumulativePathConcat = (sum => value => sum += "/" + value)("");
+  return <div>
+    <span id="path" style={{display: "none"}}>{path}</span>
+    <span onClick={() => navigate(`/${path_prefix}/`)}>media:/</span>{path.split("/").filter( r => r != "" ).map( cumulativePathConcat ).map( r => <span onClick={() => navigate(`/${path_prefix}${r}`)}>{`${r.replace(/^.*\//,"")}/`}</span> )}
+    <span className="button-tiny material-icons" onClick={ () => {window.electron.invoke( "clipboard", "writeText", path )}}>content_copy</span>
+    <span className="button-tiny material-icons" onClick={ async () => navigate( encodeMediaPath( `/${path_prefix}${await window.electron.invoke( "clipboard", "readText" )}` ) )}>content_paste</span>
+  </div>
+}
+
+// page:
 const MediaBrowser =  (props:any) => {
   let navigate = useNavigate();
   let location = useLocation();
   // let params = useParams();  // for parsing id and id2 from the router "/browse/:id/:id2/", etc...
-  let path:any = location.pathname.replace( /^\/browse/, "" );  path = (path == "" ? "/" : path);
+  let path = convertUrlToMediaPath( location.pathname, "browse" );
   last_browse_path = path;
-  const onKeyDown = useCallback( (e) => player.onKeyDown( e ), [] )
+  const onKeyDown = useCallback( (e) => onKeyDown_GlobalHandler( e ), [] )
 
   // the heavy hand
   //let [__rerender, __setRerender] = useState(0);      function render() { __setRerender(__rerender+1); }
@@ -645,7 +752,7 @@ const MediaBrowser =  (props:any) => {
   useEffect(() => {
     init( navigate, location ).then( () => {
       console.log('[MediaBrowser] init......');
-      player.onNavigate = (url) => { console.log( "[MediaBrowser] onNavigate", `${url}` ); navigate( `${url}` ); }
+      player.onNavigate = (url) => { console.log( "[MediaBrowser] onNavigate", `${url}` ); navigate( encodeMediaPath( `${url}` ) ); }
       player.onProgressChange = (amt, time) => { setProgressAmt( amt ); setProgressTime( time ); };
       player.onTrackChange = (t, i, l) => { console.log( "[MediaBrowser] setTrack" ); setTrack( t ) };
       player.onPlayerTransportChange = (state) => { console.log( "[MediaBrowser] setTrack", state ); setPlayerTransport(state); };
@@ -668,7 +775,7 @@ const MediaBrowser =  (props:any) => {
           setLoading( true );
 
           // pull a new browse listing
-          console.log( `[MediaBrowser] URL: ${path}${location.search}` );
+          console.log( `[MediaBrowser] URL: "${path}${location.search}"` );
           console.log( `[MediaBrowser] dir( "${path}" )` );
           // console.log( "save: lastURL", localStorage.getItem( "lastURL" ) )
           let l = await window.electron.invoke( "mediafs", "dir", path, undefined, false );
@@ -694,16 +801,13 @@ const MediaBrowser =  (props:any) => {
   //   [mode, audio, playing, playing.track, progressamt, currentTime, playing.listing, playing.i], // [args, ...] rerun when any of these change.   [] -> only on mount/unmount (once ever)
   // );
 
-  //given ["1", "2", "3, "4], returns ["1", "1/2", "1/2/3", "1/2/3/4" ]
-  const cumulativePathConcat = (sum => value => sum += "/" + value)("");
-
   let dom2 = (
     <div className="listing" onMouseUp={() => { player.progress_manipulating = false }} >
       <Header path={path} root="" folderimage={folderimage}></Header>
       {loading && <Loading></Loading>}
       {!loading &&
         <span>
-          <div><span onClick={() => navigate(`/browse/`)}>media:/</span>{path.split("/").filter( r => r != "" ).map( cumulativePathConcat ).map( r => <span onClick={() => navigate(`/browse${r}`)}>{`${r.replace(/^.*\//,"")}/`}</span> )}<span className="buttontiny material-icons" onClick={ () => {window.electron.invoke( "clipboard", "writeText", path )}}>content_copy</span></div>
+          <MediaPath path={path} path_prefix="browse"></MediaPath>
           <MediaList path={path} listing={listing} player_state={player_state} track={track} click_play={ (...args:any) => { player.click( ...args, "/browse", "/player" ); } }></MediaList>
         </span>
       }

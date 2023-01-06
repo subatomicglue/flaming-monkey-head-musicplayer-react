@@ -30,7 +30,7 @@ import { clipboard } from 'electron';
 process.chdir('/Users/kevinmeinert/src/flaming-monkey-head-musicplayer-react/dummydir');
 
 const env = process.env.NODE_ENV || 'development';
-let VERBOSE = true;//env != 'development' ? false : true;
+let VERBOSE = false;//env != 'development' ? false : true;
 console.log( `\n` );
 console.log( `[main.ts] -----------------------------------------` );
 console.log( `[main.ts] environment = ${env}, VERBOSE=${VERBOSE}` )
@@ -147,56 +147,37 @@ function consoleLogIPC( module, funcname, FUNC, values, result ) {
   VERBOSE && result_str.length > limit && console.log( `       <= ${JSON.stringify( result )}` )
 }
 
+async function ipcMainHandleLib( name, lib, func = (result, FUNC, ...values) => result ) {
+  ipcMain.handle(name, async (event, FUNC, ...values) => {
+    let result = lib.hasOwnProperty( FUNC ) ? await lib[FUNC](...values) : `ERROR: no such function as ${name}.${FUNC}(...)`;
+    consoleLogIPC( "main.ts", name, FUNC, values, result )
+    result = func(result, FUNC, ...values);
+    return result;
+  });
+}
+
+// readFileSync and friends
+ipcMainHandleLib( 'fs', fs, (result, FUNC, ...values) => {
+  if (FUNC == "readFileSync") {
+    //let fileURL = values[0] ? values[0] : "";
+    ////let result = convertFileToImageEmbed( fileURL );
+    //let base64 = "data:audio/m4a;base64," + result.toString('base64');
+  }
+  return result;
+});
+ipcMainHandleLib( 'mediafs', mediafs );
+ipcMainHandleLib( 'settings', settings );
+ipcMainHandleLib( 'app', app );
+ipcMainHandleLib( 'clipboard', clipboard, (result, FUNC, ...values) => {
+  console.log( FUNC, ...values, " => ", result )
+  return result
+});
 
 ipcMain.on('ipc-example', async (event, arg) => {
   const msgTemplate = (pingPong: string) => `IPC test: ${pingPong}`;
   console.log(msgTemplate(arg));
   event.reply('ipc-example', msgTemplate('pong'));
 });
-
-ipcMain.handle('fs', async (event, FUNC, ...values) => {
-  let result = fs.hasOwnProperty( FUNC ) ? await fs[FUNC](...values) : `ERROR: no such function as fs.${FUNC}(...)`;
-  consoleLogIPC( "main.ts", "fs", FUNC, values, result )
-  return result;
-})
-
-ipcMain.handle('mediafs', async (event, FUNC, ...values) => {
-  let name='mediafs'
-  let lib = mediafs;
-  let result = lib.hasOwnProperty( FUNC ) ? await lib[FUNC](...values) : `ERROR: no such function as ${name}.${FUNC}(...)`;
-  consoleLogIPC( "main.ts", name, FUNC, values, result )
-  return result;
-})
-
-ipcMain.handle('settings', async (event, FUNC, ...values) => {
-  let name='settings'
-  let lib = settings;
-  let result = lib.hasOwnProperty( FUNC ) ? await lib[FUNC](...values) : `ERROR: no such function as ${name}.${FUNC}(...)`;
-  consoleLogIPC( "main.ts", name, FUNC, values, result )
-  return result;
-})
-
-ipcMain.handle('readFileSync', async (event, fileURL, mimeType="base64") => {
-  console.log( `[main.ts] readFileSync( "${fileURL}" )` )
-  let result = convertFileToImageEmbed( fileURL );
-  //let base64 = "data:audio/m4a;base64," + result.toString('base64');
-  console.log( `       <= ${result.length} bytes` )
-  //console.log( result.slice( 0, 100 ) );
-  return result;
-})
-
-ipcMain.handle('quit',  async (event, ...args) => {
-  console.log( `[main.ts] handle quit()` )
-  app.quit();
-})
-
-ipcMain.handle('clipboard', async (event, FUNC, ...values) => {
-  let name='clipboard'
-  let lib = clipboard;
-  let result = lib.hasOwnProperty( FUNC ) ? await lib[FUNC](...values) : `ERROR: no such function as ${name}.${FUNC}(...)`;
-  consoleLogIPC( "main.ts", name, FUNC, values, result )
-  return result;
-})
 
 ipcMain.handle('loadBrowserLocalStorage', async (event) => await loadBrowserLocalStorage() )
 ipcMain.handle('saveBrowserLocalStorage', async (event) => await saveBrowserLocalStorage() )
