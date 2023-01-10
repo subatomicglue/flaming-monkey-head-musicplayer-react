@@ -35,7 +35,7 @@ Standalone app written in React (18) and NodeJS (14), packaged into an Electron 
     - **Auto Click Removal:** Fade to Silence 0.1s from end of track to avoid pop.
 
 ## Future Work:
-  - amazon music has 2 times, left (time elapsed) and right (-time left), hovering above the progress meter, on mouse over
+  - 2 times: left (time elapsed) and right (-time left), hovering above the progress meter, on mouse over
   - add a copy button to the end of the media:// url
   - playlist system
     - In Browser:   [+] shows on mouse over, adds to queue
